@@ -1,0 +1,62 @@
+/* ==========================================================================
+   #jQuery Datepicker styles - start
+   ========================================================================== */
+#ui-datepicker-div {
+	z-index: 1000 !important;
+	background-color: #fff;
+	min-width: 209px;
+	font-size: 12px;
+}
+
+#ui-datepicker-div table tr {
+	border: none;
+}
+
+#ui-datepicker-div table {
+	padding: 0 4px 4px;
+}
+
+#ui-datepicker-div table td {
+	padding: 3px;
+	line-height: 1.5em;
+}
+
+#ui-datepicker-div .ui-datepicker-header {
+	padding: 5px 16px;
+	position: relative;
+}
+
+#ui-datepicker-div .ui-datepicker-next,
+#ui-datepicker-div .ui-datepicker-prev {
+	position: absolute;
+	font-size: 14px;
+}
+
+#ui-datepicker-div .ui-datepicker-prev {
+	left: 12px;
+}
+
+#ui-datepicker-div .ui-datepicker-next {
+	right: 12px;
+}
+
+#ui-datepicker-div .ui-datepicker-title {
+	text-align: center;
+}
+
+#ui-datepicker-div .ui-datepicker-today {
+	color: #fff;
+	background-color: #000;
+}
+
+#ui-datepicker-div .ui-datepicker-today a {
+	color: #fff;
+}
+
+#ui-datepicker-div .ui-datepicker-current-day:not(.ui-datepicker-today) a {
+	color: #fff;
+}
+
+/* ==========================================================================
+   #jQuery Datepicker styles - end
+   ========================================================================== */
