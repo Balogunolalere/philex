@@ -68,7 +68,6 @@ async def contact_form(
     message: str = Form(...)
 ):
     
-    print(f"name: {name}, email: {email}, message: {message}")
     """Handle contact form submissions from contact.html"""
     config = get_email_config()
     subject = f"Contact Form: {name}"
@@ -89,7 +88,6 @@ async def reserve_table(
     datetime: str = Form(None)
 ):
     
-    print(f"partysize: {partysize}, date: {date}, time: {time}, datetime: {datetime}")
     """Handle table reservation form submissions from bar.html"""
     config = get_email_config()
     
