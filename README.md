@@ -87,6 +87,14 @@ deployment would fail at runtime with missing imports (and `dist/` must exist
 because `wrangler.jsonc` points `assets.directory` at it — hence the build
 command builds it first).
 
+> **Netlify is not used.** If you see a Netlify build of this repo failing with
+> `npm error ... ENOENT ... /opt/buildhome/repo/package.json`, that's a stale
+> Netlify site still connected to the GitHub repo (its dashboard build command
+> is `npm run build`, but this repo has no `package.json` since the Cloudflare
+> migration — Netlify also can't run the Worker, which needs Cloudflare's
+> `cloudflare:sockets` API). Delete the site under Netlify → Site configuration
+> → Danger zone, or at least disconnect the repo.
+
 > **Troubleshooting: `The directory specified by the "assets.directory" field
 > ... does not exist: /opt/buildhome/repo/dist`** — the build command
 > (`node scripts/build.mjs`) is not running in your project settings, so
