@@ -1,7 +1,12 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "philex",
-  "main": "src/worker.js",
+  "main": "src/worker.py",
   "compatibility_date": "2026-08-25",
+  "compatibility_flags": [
+    "python_workers",
+    "python_dedicated_snapshot"
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

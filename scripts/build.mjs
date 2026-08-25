@@ -130,8 +130,6 @@ async function main() {
   const { copied, skipped } = await copyStatic();
   console.log(`static: ${copied} files copied${skipped ? `, ${skipped} skipped (too large)` : ""}`);
 
-  await cp(path.join(ROOT, "_headers"), path.join(DIST, "_headers"));
-  await cp(path.join(ROOT, "_redirects"), path.join(DIST, "_redirects"));
   console.log("done -> ./dist");
 }
 

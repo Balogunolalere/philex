@@ -1,103 +1,118 @@
-# Philex / Broadway Lounge — Cloudflare (free)
+# Philex / Broadway Lounge — Cloudflare Python Workers (FastAPI)
 
-Static site (templates pre-rendered to HTML) + serverless form handlers on
-**Cloudflare Workers / Pages**, with email sent over SMTP from serverless code.
-No database, no server — free tier, auto-deploys on `git push`.
+The site runs on **Cloudflare Python Workers** with **FastAPI**, deployed with
+`uv` + `pywrangler` (Cloudflare's official Python Workers tooling). Pages are
+pre-rendered static HTML served from Cloudflare's CDN; FastAPI handles the
+form POSTs and emails them over SMTP (Hostinger). Free tier, auto-deploys.
+
+Followed Cloudflare's official guides/examples:
+- FastAPI on Python Workers: https://developers.cloudflare.com/workers/languages/python/packages/fastapi/
+- Python Workers examples (FastAPI + assets): https://github.com/cloudflare/python-workers-examples
 
 ## How it works
 
-| Part | What it used to be | Now |
-| --- | --- | --- |
-| Pages (`/`, `/about`, `/bar`, `/contact`, `/gallery`, `/philex-index`) | FastAPI rendering Jinja2 templates | Static HTML in `./dist`, served from Cloudflare's CDN |
-| `POST /contact-us` | FastAPI + `smtplib` | `functions/contact-us.js` (Pages) or `src/worker.js` (Workers) → SMTP |
-| `POST /reserve-table` | FastAPI + `smtplib` | same as above |
-
-- `scripts/build.mjs` renders the Jinja templates to `dist/` (verified
-  byte-identical to Jinja2 output) and copies `static/`. The templates use only
-  `{% extends %}` / `{% block %}`, so no Python runtime is needed.
-- `functions/_lib/smtp.js` is a minimal SMTP client for Cloudflare's TCP
-  socket API. It defaults to Hostinger (`smtp.hostinger.com:465`, implicit TLS)
-  and supports port 587 with STARTTLS. Port 25 is blocked by Cloudflare.
-- Media was re-encoded so every file is under the 25 MiB per-file limit.
-
-## Deploying
-
-### Option A — Workers (what's live at `*.workers.dev`)
-
-The repo ships a GitHub-ready Workers project:
-
-- `wrangler.jsonc` — serves `./dist` via the `ASSETS` binding, `run_worker_first: true`
-- `src/worker.js` — handles the two form POSTs, serves everything else from `ASSETS`
-- `package.json` — `npm run build` / `npm run deploy`
-
-Dashboard: **Workers & Pages → Create → Workers → Connect to GitHub** (Workers
-Builds). After a push it will run the build and `wrangler deploy` automatically.
-If your project was created with custom build/deploy commands, set them to:
-
-- Build command: `node scripts/build.mjs` (or `npm run build`)
-- Deploy command: `npm run deploy` (or `wrangler deploy`)
-
-Then add environment variables under **Settings → Variables and Secrets**:
-
-| Variable | Value |
+| Part | Implementation |
 | --- | --- |
-| `HOST_EMAIL` | your mailbox, e.g. `info@philexentertainment.com` (sender + default recipient) |
-| `HOST_PASSWORD` | the mailbox password |
+| `/`, `/about`, `/bar`, `/contact`, `/gallery`, `/philex-index` | `scripts/build.mjs` renders the Jinja templates to `dist/` (byte-identical to Jinja2); served from the `ASSETS` binding |
+| `POST /contact-us`, `POST /reserve-table` | `src/worker.py` (FastAPI) → `src/mailer.py` (SMTP over `cloudflare:sockets`) |
+| `/reservations` (legacy) | 301 → `/bar` |
+| Other unmatched paths | FastAPI catch-all proxies to `ASSETS` (official pattern) |
 
-Optional: `SMTP_HOST` (default `smtp.hostinger.com`), `SMTP_PORT` (default
-`465`; use `587` for STARTTLS), `EMAIL_TO` (defaults to `HOST_EMAIL`),
-`EMAIL_FROM_NAME` (default `Broadway Lounge`).
+- `src/mailer.py` implements SMTP (EHLO, AUTH LOGIN with AUTH PLAIN fallback,
+  dot-stuffing) over Cloudflare's TCP socket API — Python's `socket` module is
+  not available in Workers; the FFI (`import_from_javascript("cloudflare:sockets")`)
+  is used instead. Defaults: `smtp.hostinger.com:465` (implicit TLS) or `587`
+  (STARTTLS). Port 25 is blocked by Cloudflare.
 
-### Option B — Pages (the Vercel-style flow)
+## Local development
 
-1. **Workers & Pages → Create → Pages → Connect to Git** → select the repo.
-2. Build settings: framework preset **None**, build command
-   `node scripts/build.mjs`, output directory `dist`.
-3. Add the same environment variables under **Settings → Environment variables**.
-4. Every push rebuilds and redeploys. You get a free `*.pages.dev` URL.
+Prerequisites: [uv](https://docs.astral.sh/uv/getting-started/installation/)
+and [Node.js](https://nodejs.org/).
 
-*(The `functions/` directory is the Pages variant of the form handlers; if you
-use Option A, ignore it.)*
+```bash
+node scripts/build.mjs   # rebuild ./dist (static assets; needed before dev/deploy)
+uv run pywrangler dev
+```
 
-### Custom domain
+This builds the worker and serves the site locally at `http://localhost:8787`.
+`dist/` is a build artifact (gitignored), so run `scripts/build.mjs` first — and
+again whenever you change `templates/` or `static/`.
+
+For form tests, create `.dev.vars` (gitignored) in the project root:
+
+```bash
+HOST_EMAIL=info@yourdomain.com
+HOST_PASSWORD=your-mailbox-password
+SMTP_HOST=smtp.hostinger.com
+SMTP_PORT=465
+```
+
+## Deploy
+
+```bash
+uv run pywrangler deploy
+```
+
+It prompts you to log in to Cloudflare via the browser on first use.
+
+Environment variables (secrets — set with `npx wrangler secret put <NAME>` or
+in the dashboard under **Settings → Variables and Secrets**):
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `HOST_EMAIL` | yes | mailbox address (sender + default recipient) |
+| `HOST_PASSWORD` | yes | Hostinger mailbox password |
+| `SMTP_HOST` | no | default `smtp.hostinger.com` |
+| `SMTP_PORT` | no | default `465` (use `587` for STARTTLS) |
+| `EMAIL_TO` | no | overrides the recipient (default `HOST_EMAIL`) |
+| `EMAIL_FROM_NAME` | no | default `Broadway Lounge` |
+
+Local `.dev.vars` is used by `pywrangler dev` automatically; production uses
+the secrets above.
+
+### Git push auto-deploy (optional)
+
+If your Worker is connected to GitHub (Workers Builds), the dashboard deploy
+settings should be:
+
+- Build command: `node scripts/build.mjs`
+- Deploy command: `uv run pywrangler deploy` (Python Workers use `uv`; the
+  Workers Builds image has `uv` and `node` installed)
+
+## Custom domain
 
 The domain is registered at Hostinger, but Cloudflare needs your zone on its
 platform (free plan also gives DNS + CDN):
 
-1. Hostinger → Domain → set the nameservers to the two Cloudflare nameservers
-   shown when adding the domain on Cloudflare (**Add a domain**, Free plan).
-2. Wait for the zone to show **Active**.
-3. Workers & Pages → your project → **Custom domains** → **Set up a custom
-   domain** → enter e.g. `philexentertainment.com` (add `www.` separately).
+1. Cloudflare dashboard → **Add a domain** → Free plan → note the two
+   nameservers.
+2. Hostinger → Domain → set those nameservers; wait until the zone is **Active**.
+3. Worker → **Settings → Domains & Routes → Add custom domain** →
+   `philexentertainment.com` (add `www.` separately).
 
-## Local development
+## Free-tier caveats
 
-```bash
-npm install
-npm run dev        # builds dist/, then wrangler dev serves it locally
+- Python Workers are in **beta** (`python_workers` compatibility flag, enabled
+  in `wrangler.jsonc`) and run via Pyodide (WASM).
+- Free plan: 100,000 requests/day and **10 ms CPU per invocation**. FastAPI +
+  Pyodide can approach that on cold starts; if you ever hit `501 CPU time limit`
+  errors, the cheapest fix is removing `"run_worker_first": true` from
+  `wrangler.jsonc` (pages then get served straight from the CDN without
+  invoking Python) — or moving to the Workers Paid plan.
+- SMTP from serverless IPs can occasionally be throttled by mail providers;
+  check Worker logs for `contact-us: send failed` / `reserve-table: send
+  failed`.
+
+## Layout
+
+```
+src/worker.py      FastAPI app + WorkerEntrypoint (ASGI)
+src/mailer.py      SMTP over cloudflare:sockets
+scripts/build.mjs  renders templates/ -> dist/ and copies static/
+templates/         Jinja2 templates (source of truth)
+static/            images, fonts, etc.
+wrangler.jsonc     Worker config (python_workers, ASSETS binding = ./dist)
 ```
 
-Create `.dev.vars` (gitignored) with your SMTP credentials for local form tests.
-
-## Troubleshooting
-
-**The site shows raw `{% endblock %}` text and/or missing images** — the
-deployment is serving the *template files* instead of the built site. Root
-cause: the build step isn't (or no longer) producing `dist/` as the site root.
-Fix: make sure the build command runs `node scripts/build.mjs` and the output
-directory is `dist` (not `templates`), then redeploy. Sanity-check locally:
-`node scripts/build.mjs` must print `rendered about -> /about ... done -> ./dist`.
-
-**Form emails don't arrive** — SMTP from serverless IPs can be throttled. Check
-the Worker/Pages logs for `contact-us failed` / `reserve-table failed`; usually
-it's credentials (`HOST_PASSWORD`) or an unauthorized sender address. The
-drop-in upgrade is a free email API (Resend/Brevo) — swap the internal
-`sendEmail(env, ...)` call.
-
-## Notes & limits
-
-- Free tier: requests to static assets are free/unlimited; form function calls
-  count against the Workers free quota (100,000 requests/day).
-- `/reservations` (never rendered by the old app) now 301-redirects to `/bar`.
-- The old FastAPI app (`main.py`, `requirements.txt`, `render.yml`) was moved
-  out of the repo; it lives in git history.
+The old FastAPI/Render files (`main.py`, `requirements.txt`, `render.yml`) and
+the JS Pages-Functions variant are in git history.
