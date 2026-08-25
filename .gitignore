@@ -1,2 +1,15 @@
-__pycache__/*
-philexenv/*
+# Python (legacy app, no longer deployed)
+__pycache__/
+*.pyc
+philexenv/
+.venv/
+.python-version
+
+# Cloudflare Pages build output
+dist/
+
+# Wrangler local dev
+.wrangler/
+.dev.vars
+node_modules/
+.reasonix/*
