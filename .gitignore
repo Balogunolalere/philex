@@ -5,8 +5,9 @@ philexenv/
 .venv/
 .python-version
 
-# Cloudflare Pages build output
+# Cloudflare Pages build output + Python Workers vendored packages
 dist/
+python_modules/
 
 # Wrangler local dev
 .wrangler/

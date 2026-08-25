@@ -73,11 +73,29 @@ the secrets above.
 ### Git push auto-deploy (optional)
 
 If your Worker is connected to GitHub (Workers Builds), the dashboard deploy
-settings should be:
+settings should be (Settings → Builds & deployments):
 
-- Build command: `node scripts/build.mjs`
-- Deploy command: `uv run pywrangler deploy` (Python Workers use `uv`; the
-  Workers Builds image has `uv` and `node` installed)
+- Build command:
+  `curl -LsSf https://astral.sh/uv/install.sh | sh && node scripts/build.mjs`
+- Deploy command: `~/.local/bin/uv run pywrangler deploy`
+
+Why: `pywrangler deploy` first runs `sync`, which vendors the Python packages
+from `pyproject.toml` (fastapi, python-multipart, …) into `python_modules/`
+using uv+Pyodide, then proxies to `wrangler deploy`. Plain `wrangler deploy`
+uploads the Worker and assets but does not vendor Python packages, so the
+deployment would fail at runtime with missing imports (and `dist/` must exist
+because `wrangler.jsonc` points `assets.directory` at it — hence the build
+command builds it first).
+
+> **Troubleshooting: `The directory specified by the "assets.directory" field
+> ... does not exist: /opt/buildhome/repo/dist`** — the build command
+> (`node scripts/build.mjs`) is not running in your project settings, so
+> `dist/` is never created. Set the Build command as above and redeploy.
+
+> **Troubleshooting: `ModuleNotFoundError: fastapi` at runtime** — the Worker
+> was deployed without vendored packages (e.g. with plain `npx wrangler
+> deploy`). Deploy with `uv run pywrangler deploy` so `python_modules/` gets
+> created and uploaded.
 
 ## Custom domain
 
