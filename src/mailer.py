@@ -66,7 +66,12 @@ class _SmtpSession:
             await self._fill()
 
     async def send(self, line: str) -> None:
-        await self.writer.write((line + "\r\n").encode("utf-8"))
+        # The sockets API writer requires a JS Uint8Array; a raw Python bytes
+        # object is rejected ("non-ArrayBuffer/ArrayBufferView type").
+        from js import Uint8Array
+
+        data = (line + "\r\n").encode("utf-8")
+        await self.writer.write(Uint8Array.new(data))
 
     async def close(self) -> None:
         try:
