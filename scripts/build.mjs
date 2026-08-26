@@ -61,10 +61,131 @@ function renderPage(pageSrc, baseSrc) {
 
 /** Make asset paths absolute so directory-style URLs (/bar/) still resolve them. */
 function absolutizeAssetPaths(html) {
+  // srcset uses ", static/..." with a space; keep the &quot; form working too.
   return html
-    .replaceAll('"static/', '"/static/')
-    .replaceAll("'static/", "'/static/")
-    .replaceAll("&quot;static/", "&quot;/static/");
+    .replaceAll("&quot;static/", "&quot;/static/")
+    .replace(/(?<=["'\s,(])static\//g, "/static/");
+}
+
+/** `(?:(?!</tag>)[\s\S])*?` — lazy match that cannot cross a closing tag. */
+const withinTag = (close) => `(?:(?!${close})[\\s\\S])*?`;
+
+/**
+ * The templates are a mirror of the qode "Fidalgo" WordPress demo. Everything
+ * below strips the demo-only third-party snippets (GTM, Zendesk chat, qode
+ * toolbar) and points all demo-host assets at the local /static/ mirror, so
+ * pages don't depend on https://fidalgo.qodeinteractive.com (slow, and some
+ * files there have since been removed, which broke the layout).
+ */
+
+/**
+ * Production URL used for canonical / og:url / og:image meta tags.
+ * TODO: set to the live domain (e.g. "https://philexentertainment.com") once
+ * the custom domain is set up; while null, the demo URLs in meta tags are
+ * left untouched.
+ */
+const SITE_URL = null;
+
+/** Meta/link tags that must keep absolute URLs (never the /static/ rewrite). */
+const SITE_IDENTITY_TAG_RE =
+  /<link\b[^>]*rel=["']canonical["'][^>]*>|<meta\b[^>]*(?:property|itemprop)=["'](?:og:url|og:image|og:image:secure_url|twitter:url|twitter:image|image|url)["'][^>]*>/gi;
+
+function stripDemoCruft(html) {
+  // WP head discovery links: rss/comment feeds, oembed, api.w.org, RSD.
+  html = html.replace(/<link\b[^>]*rel=["'](?:alternate|https:\/\/api\.w\.org\/|EditURI|shortlink)["'][^>]*\/?>\s*/gi, "");
+  // dns-prefetch hints for hosts we no longer use.
+  html = html.replace(
+    /<link\b[^>]*rel=["']dns-prefetch["'][^>]*href=["'][^"']*(?:fidalgo\.qodeinteractive\.com|export\.qodethemes\.com|static\.zdassets\.com)[^"']*["'][^>]*\/?>\s*/gi,
+    ""
+  );
+  // Qode demo toolbar (export.qodethemes.com) stylesheet + script.
+  html = html.replace(/<link\b[^>]*href=["'][^"']*export\.qodethemes\.com[^"']*["'][^>]*\/?>\s*/gi, "");
+  html = html.replace(/<script\b[^>]*src=["'][^"']*export\.qodethemes\.com[^"']*["'][^>]*>\s*<\/script>\s*/gi, "");
+  // Zendesk chat widget (the demo's own key, doesn't work for this site).
+  html = html.replace(/<script\b[^>]*src=["'][^"']*static\.zdassets\.com[^"']*["'][^>]*>\s*<\/script>\s*/gi, "");
+  // Google Tag Manager (the demo's GTM-KLJLSX7 container): head snippet,
+  // body <noscript> iframe, footer loader, and leftover comment markers.
+  // Each pattern is anchored so it can only match the script it targets
+  // (an unanchored `[\s\S]*?` would start at the first <script> in the
+  // document and swallow the whole head + body).
+  html = html.replace(/<script\b[^>]*>\s*var gtm4wp_datalayer_name[\s\S]*?<\/script>\s*/gi, "");
+  html = html.replace(
+    new RegExp(`<noscript>${withinTag("</noscript>")}googletagmanager\\.com\\/ns\\.html${withinTag("</noscript>")}</noscript>\\s*`, "gi"),
+    ""
+  );
+  html = html.replace(
+    new RegExp(`<script\\b[^>]*>${withinTag("</script>")}googletagmanager[\\s\\S]*?${withinTag("</script>")}</script>\\s*`, "gi"),
+    ""
+  );
+  html = html.replace(
+    new RegExp(`<script\\b[^>]*>${withinTag("</script>")}dataLayer_content${withinTag("</script>")}</script>\\s*`, "gi"),
+    ""
+  );
+  html = html.replace(/<!--\s*[^>]*Google Tag Manager[^>]*-->\s*/gi, "");
+  return html;
+}
+
+function localizeDemoUrls(html, pagePath) {
+  const pathFor = (p) => (p ? `/${p}/` : "/");
+
+  // Pull site-identity meta tags aside so the generic rewrite below cannot
+  // turn their absolute demo URLs into relative /static/ paths.
+  const kept = [];
+  html = html.replace(SITE_IDENTITY_TAG_RE, (tag) => {
+    kept.push(tag);
+    return `\u0000META${kept.length - 1}\u0000`;
+  });
+
+  // Demo-host assets (HTML attributes, inline style url(), JSON-escaped
+  // forms in the Elementor config) -> local /static/ mirror.
+  html = html.replaceAll("https://fidalgo.qodeinteractive.com/", "/static/");
+  html = html.replaceAll("https:\\/\\/fidalgo.qodeinteractive.com\\/", "/static/");
+  html = html.replaceAll("//fidalgo.qodeinteractive.com/", "/static/");
+
+  // Drop the WordPress ?ver= cache-buster from local asset URLs.
+  html = html.replace(/(\/static\/[^"'\s)]*)\?ver=[^"'\s)]*/g, "$1");
+
+  // Restore the site-identity tags.
+  html = html.replace(/\u0000META(\d+)\u0000/g, (_, i) => kept[Number(i)]);
+
+  if (SITE_URL) {
+    html = html.replace(
+      /(<link\b[^>]*rel=["']canonical["'][^>]*href=["'])[^"']*(["'])/gi,
+      `$1${SITE_URL}${pathFor(pagePath)}$2`
+    );
+    html = html.replace(
+      /(<meta\b[^>]*property=["'](?:og:url|twitter:url)["'][^>]*content=["'])[^"']*(["'])/gi,
+      `$1${SITE_URL}${pathFor(pagePath)}$2`
+    );
+    html = html.replace(
+      /(<meta\b[^>]*itemprop=["']url["'][^>]*content=["'])[^"']*(["'])/gi,
+      `$1${SITE_URL}${pathFor(pagePath)}$2`
+    );
+    html = html.replace(
+      /(<meta\b[^>]*property=["'](?:og:image|og:image:secure_url|twitter:image)["'][^>]*content=["'])(?:https?:\/\/fidalgo\.qodeinteractive\.com\/)?static\//gi,
+      `$1${SITE_URL}/static/`
+    );
+    html = html.replace(
+      /(<meta\b[^>]*itemprop=["']image["'][^>]*content=["'])(?:https?:\/\/fidalgo\.qodeinteractive\.com\/)?static\//gi,
+      `$1${SITE_URL}/static/`
+    );
+  }
+
+  return html;
+}
+
+function finalizePage(html, pagePath) {
+  html = stripDemoCruft(html);
+  html = absolutizeAssetPaths(html);
+  html = localizeDemoUrls(html, pagePath);
+  if (/export\.qodethemes\.com/.test(html)) {
+    throw new Error(`qode demo toolbar remains (page: ${pagePath || "index"})`);
+  }
+  const stripped = html.replace(SITE_IDENTITY_TAG_RE, "");
+  if (/fidalgo\.qodeinteractive\.com/.test(stripped)) {
+    throw new Error(`unlocalized demo URL remains (page: ${pagePath || "index"})`);
+  }
+  return html;
 }
 
 async function copyStatic() {
@@ -112,13 +233,13 @@ async function main() {
   const baseSrc = await readFile(path.join(TEMPLATES, "base.html"), "utf8");
 
   // Standalone homepage
-  const indexHtml = absolutizeAssetPaths(await readFile(path.join(TEMPLATES, "index.html"), "utf8"));
+  const indexHtml = finalizePage(await readFile(path.join(TEMPLATES, "index.html"), "utf8"), "");
   await writeFile(path.join(DIST, "index.html"), indexHtml);
 
   for (const page of PAGES) {
     const pageSrc = await readFile(path.join(TEMPLATES, `${page}.html`), "utf8");
     let html = renderPage(pageSrc, baseSrc);
-    html = absolutizeAssetPaths(html);
+    html = finalizePage(html, page);
     if (/{%|{{/.test(html)) {
       throw new Error(`unrendered Jinja remains in ${page}.html`);
     }

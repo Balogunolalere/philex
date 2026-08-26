@@ -14,6 +14,15 @@ Followed Cloudflare's official guides/examples:
 | Part | Implementation |
 | --- | --- |
 | `/`, `/about`, `/bar`, `/contact`, `/gallery`, `/philex-index` | `scripts/build.mjs` renders the Jinja templates to `dist/` (byte-identical to Jinja2); served from the `ASSETS` binding |
+
+`scripts/build.mjs` also rewrites the templates' asset URLs: everything that
+originally pointed at the WordPress demo (`fidalgo.qodeinteractive.com`,
+`export.qodethemes.com`) is served from the local `static/` mirror instead
+(fixed slow loads and the missing-`custom-frontend-lite.min.css` layout
+breakage), and the demo-only snippets (Google Tag Manager, Zendesk chat, qode
+toolbar) are stripped. `scripts/normalize-static-assets.mjs` was a one-off
+cleanup that renamed the mirror's `file.css?ver=…` artifacts into servable
+names; keep it for reference but it should be a no-op now.
 | `POST /contact-us`, `POST /reserve-table` | `src/worker.py` (FastAPI) → `src/mailer.py` (SMTP over `cloudflare:sockets`) |
 | `/reservations` (legacy) | 301 → `/bar` |
 | Other unmatched paths | FastAPI catch-all proxies to `ASSETS` (official pattern) |
