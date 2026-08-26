@@ -175,6 +175,12 @@ function finalizePage(html, pagePath) {
   html = stripDemoCruft(html);
   html = absolutizeAssetPaths(html);
   html = localizeDemoUrls(html, pagePath);
+  // Restore the Elementor responsive width utilities that the mirrored CSS
+  // lacks (see static/css/elementor-responsive.css).
+  html = html.replace(
+    "</head>",
+    '<link rel="stylesheet" href="/static/css/elementor-responsive.css" />\n</head>'
+  );
   if (/export\.qodethemes\.com/.test(html)) {
     throw new Error(`qode demo toolbar remains (page: ${pagePath || "index"})`);
   }

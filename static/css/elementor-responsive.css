@@ -1,0 +1,109 @@
+/*
+ * Elementor widget responsive width utilities.
+ *
+ * The mirrored Elementor CSS only shipped the desktop part
+ * (`custom-frontend-lite.min.css` defines `elementor-widget__width-*` as
+ * max-width rules but not the `-tablet-`/`-mobile-` variants). The templates
+ * use classes like `elementor-widget-mobile__width-inherit`, but the pages'
+ * inline Elementor CSS hard-codes `--container-widget-width` (e.g. 260px)
+ * per breakpoint, so on small screens widgets kept their desktop sizing:
+ * narrow text columns with large empty space and cramped sections.
+ *
+ * Recreating Elementor's responsive utilities (they override the
+ * `--container-widget-width` variable) makes widgets fill their container
+ * on phones/tablets, as Elementor normally does.
+ */
+@media (max-width: 1024px) {
+	.elementor-widget-tablet__width-auto {
+		--container-widget-width: auto !important;
+		--container-widget-flex-grow: 1;
+		width: auto !important;
+		max-width: 100% !important;
+	}
+
+	.elementor-widget-tablet__width-initial {
+		--container-widget-width: initial !important;
+		--container-widget-flex-grow: 0;
+		width: initial !important;
+		max-width: 100% !important;
+	}
+
+	.elementor-widget-tablet__width-inherit {
+		--container-widget-width: inherit !important;
+		--container-widget-flex-grow: 0;
+		width: inherit !important;
+		max-width: 100% !important;
+	}
+}
+
+@media (max-width: 767px) {
+	.elementor-widget-mobile__width-auto {
+		--container-widget-width: auto !important;
+		--container-widget-flex-grow: 1;
+		width: auto !important;
+		max-width: 100% !important;
+	}
+
+	.elementor-widget-mobile__width-initial {
+		--container-widget-width: initial !important;
+		--container-widget-flex-grow: 0;
+		width: initial !important;
+		max-width: 100% !important;
+	}
+
+	.elementor-widget-mobile__width-inherit {
+		--container-widget-width: 100% !important;
+		--container-widget-flex-grow: 0;
+		width: 100% !important;
+		max-width: 100% !important;
+	}
+}
+
+/* The philex-index info sections use desktop-percentage widths that the page's
+   generated CSS bakes in per breakpoint; force them full-width on phones. */
+@media (max-width: 767px) {
+	.elementor-1604 .elementor-element.elementor-element-bac0bdb,
+	.elementor-1604 .elementor-element.elementor-element-d1e7f04 {
+		--container-widget-width: 100% !important;
+		width: 100% !important;
+		max-width: 100% !important;
+	}
+}
+
+/* The page's generated CSS applies tablet values (`--padding-left: 135px`,
+   `padding: 128px 0 135px`) down to phones, which leaves large empty space
+   and narrow text columns on mobile. Reset them for small screens. */
+@media (max-width: 680px) {
+	.elementor-1604 .elementor-element.elementor-element-28601f9,
+	.elementor-1604 .elementor-element.elementor-element-564d804 {
+		--padding-left: 0px !important;
+		--padding-right: 0px !important;
+	}
+
+	.elementor-1604 .elementor-element.elementor-element-bac0bdb > .elementor-widget-container,
+	.elementor-1604 .elementor-element.elementor-element-d1e7f04 > .elementor-widget-container {
+		padding: 40px 0 0 0 !important;
+	}
+}
+
+/* The /bar page has the same tablet-value leak: sections keep 100px paddings
+   (and 65px) on phones, creating large empty areas. */
+@media (max-width: 680px) {
+	.elementor-element-b74feef,
+	.elementor-element-3c9dadf,
+	.elementor-element-02b3b39,
+	.elementor-element-2babc20 {
+		--padding-top: 25px !important;
+		--padding-bottom: 25px !important;
+	}
+}
+
+/* Keep any fixed-width media inside the viewport on small screens. */
+@media (max-width: 767px) {
+	#qodef-page-inner img,
+	#qodef-page-inner video,
+	#qodef-page-inner svg {
+		max-width: 100% !important;
+		height: auto !important;
+	}
+}
