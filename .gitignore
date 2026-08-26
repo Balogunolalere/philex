@@ -12,5 +12,6 @@ python_modules/
 # Wrangler local dev
 .wrangler/
 .dev.vars
+.env
 node_modules/
 .reasonix/*
