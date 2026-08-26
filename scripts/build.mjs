@@ -79,12 +79,9 @@ const withinTag = (close) => `(?:(?!${close})[\\s\\S])*?`;
  */
 
 /**
- * Production URL used for canonical / og:url / og:image meta tags.
- * TODO: set to the live domain (e.g. "https://philexentertainment.com") once
- * the custom domain is set up; while null, the demo URLs in meta tags are
- * left untouched.
+ * Production domain used in canonical / og:url / og:image meta tags.
  */
-const SITE_URL = null;
+const SITE_URL = "https://philexentertainment.com";
 
 /** Meta/link tags that must keep absolute URLs (never the /static/ rewrite). */
 const SITE_IDENTITY_TAG_RE =
@@ -162,11 +159,11 @@ function localizeDemoUrls(html, pagePath) {
       `$1${SITE_URL}${pathFor(pagePath)}$2`
     );
     html = html.replace(
-      /(<meta\b[^>]*property=["'](?:og:image|og:image:secure_url|twitter:image)["'][^>]*content=["'])(?:https?:\/\/fidalgo\.qodeinteractive\.com\/)?static\//gi,
+      /(<meta\b[^>]*property=["'](?:og:image|og:image:secure_url|twitter:image)["'][^>]*content=["'])https?:\/\/fidalgo\.qodeinteractive\.com\//gi,
       `$1${SITE_URL}/static/`
     );
     html = html.replace(
-      /(<meta\b[^>]*itemprop=["']image["'][^>]*content=["'])(?:https?:\/\/fidalgo\.qodeinteractive\.com\/)?static\//gi,
+      /(<meta\b[^>]*itemprop=["']image["'][^>]*content=["'])https?:\/\/fidalgo\.qodeinteractive\.com\//gi,
       `$1${SITE_URL}/static/`
     );
   }
