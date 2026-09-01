@@ -107,7 +107,10 @@ async def send_email(
     """Send a plain-HTML email through the configured SMTP server.
 
     Environment variables used (from the Worker ``env`` binding):
-      HOST_EMAIL, HOST_PASSWORD (required)
+      HOST_EMAIL, HOST_PASSWORD (required; HOST_EMAIL is the MAIL FROM sender)
+      SMTP_USERNAME (optional; defaults to HOST_EMAIL — needed for providers
+        like Cloudflare Email Sending whose AUTH username differs from the
+        sender address, e.g. ``api_token``)
       SMTP_HOST (default smtp.hostinger.com), SMTP_PORT (default 465)
       EMAIL_TO (defaults to HOST_EMAIL), EMAIL_FROM_NAME
     """
@@ -117,6 +120,7 @@ async def send_email(
     port = int(port or _single_value(getattr(env, "SMTP_PORT", None)) or 465)
     sender = _single_value(getattr(env, "HOST_EMAIL", None))
     password = _single_value(getattr(env, "HOST_PASSWORD", None))
+    username = _single_value(getattr(env, "SMTP_USERNAME", None)) or sender
     name = from_name or _single_value(getattr(env, "EMAIL_FROM_NAME", None)) or "Broadway Lounge"
 
     if not sender or not password:
@@ -147,14 +151,14 @@ async def send_email(
         await session.send("AUTH LOGIN")
         code, line = await session.read_response()
         if code == 334:
-            await session.send(_b64(sender))
+            await session.send(_b64(username))
             code, line = await session.read_response()
             if code == 334:
                 await session.send(_b64(password))
                 code, line = await session.read_response()
             _expect(code, line, 235, "AUTH LOGIN")
         else:
-            auth_plain = f"\x00{sender}\x00{password}"
+            auth_plain = f"\x00{username}\x00{password}"
             await session.send(f"AUTH PLAIN {_b64(auth_plain)}")
             code, line = await session.read_response()
             _expect(code, line, 235, "AUTH PLAIN")
