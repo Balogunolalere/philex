@@ -1,96 +1,77 @@
-"""Minimal SMTP client for Cloudflare Python Workers.
+"""Send email through the mailapi HTTP service.
 
-Cloudflare Workers cannot open raw sockets with Python's ``socket`` module, so
-this uses the Workers runtime's TCP socket API (``cloudflare:sockets``) via the
-Pyodide FFI (see https://developers.cloudflare.com/workers/languages/python/ffi/).
+This Worker does not speak SMTP itself. It POSTs to a ``mailapi`` deployment
+(see the sibling ``mailapi`` project), which owns the Hostinger SMTP accounts
+and does the actual delivery. That keeps the mailbox password out of this
+project entirely: all this Worker needs is the mailapi URL and one API key.
 
-Defaults target Hostinger's mail server (smtp.hostinger.com). Port 465 uses
-implicit TLS, port 587 uses STARTTLS. Port 25 is prohibited by Cloudflare.
+Configuration comes from the Worker ``env`` bindings (Cloudflare secrets in
+production, ``.dev.vars`` locally):
+
+  MAILAPI_URL   Base URL of the mailapi deployment, no trailing slash.
+  MAILAPI_KEY   API key for this project. Held by Cloudflare as a secret.
+  MAILAPI_ACCOUNT  Optional: which mailapi SMTP account to send from. Needed
+                 only when the key is scoped to more than one account.
+  EMAIL_FROM_NAME  Optional: override the display name on the From header.
+                 When unset, mailapi's own account ``fromName`` is used.
+
+``EMAIL_TO`` (the recipient) is read by the caller in ``worker.py``.
 """
 
 from __future__ import annotations
 
-import base64
-import re
+import json
 
 __all__ = ["send_email"]
 
 
-def _b64(value: str) -> str:
-    return base64.b64encode(value.encode("utf-8")).decode("ascii")
+def _single_value(value) -> str:
+    return value if value is not None else ""
 
 
-def _connect_socket(host: str, port: int, secure_transport: str):
-    """Open a TCP socket using the cloudflare:sockets runtime API."""
-    from workers.utils import import_from_javascript
+async def _post(base_url: str, api_key: str, payload: dict):
+    """POST JSON to mailapi using the Workers runtime fetch.
 
-    sockets = import_from_javascript("cloudflare:sockets")
-    return sockets.connect(
-        {"hostname": host, "port": port},
-        {"secureTransport": secure_transport},
+    Imported lazily like the rest of the runtime FFI so the module stays
+    importable outside a Worker (tests, linting). No client-side timeout is set:
+    the runtime bounds outbound fetches, and mailapi bounds its own SMTP work.
+    """
+    from workers import fetch
+
+    return await fetch(
+        f"{base_url.rstrip('/')}/api/send",
+        method="POST",
+        headers={
+            "authorization": f"Bearer {api_key}",
+            "content-type": "application/json",
+            "user-agent": "philex-worker",
+        },
+        body=json.dumps(payload),
     )
 
 
-def _as_bytes(value) -> bytes:
-    """Normalize a JS Uint8Array (exposed as a Pyodide buffer view) to bytes."""
-    return value.tobytes() if hasattr(value, "tobytes") else bytes(value)
+async def _describe_failure(resp) -> str:
+    """Pull mailapi's JSON error out of a failed response.
 
-
-class _SmtpSession:
-    """Tiny SMTP dialogue helper over one socket connection."""
-
-    def __init__(self, socket):
-        self.socket = socket
-        self.reader = socket.readable.getReader()
-        self.writer = socket.writable.getWriter()
-        self._buffer = bytearray()
-
-    async def _fill(self) -> None:
-        result = await self.reader.read()
-        if result.done:
-            raise ConnectionError("SMTP server closed the connection")
-        self._buffer.extend(_as_bytes(result.value))
-
-    async def read_response(self) -> tuple[int, str]:
-        """Read one SMTP reply; multi-line replies (NNN-...) are consumed."""
-        while True:
-            nl = self._buffer.find(b"\n")
-            if nl >= 0:
-                raw = bytes(self._buffer[:nl])
-                del self._buffer[: nl + 1]
-                line = raw.decode("utf-8", "replace").rstrip("\r")
-                code = int(line[:3]) if line[:3].isdigit() else 0
-                if code == 220 or (len(line) >= 4 and line[3] == " "):
-                    return code, line
-                continue
-            await self._fill()
-
-    async def send(self, line: str) -> None:
-        # The sockets API writer requires a JS Uint8Array; a raw Python bytes
-        # object is rejected ("non-ArrayBuffer/ArrayBufferView type").
-        from js import Uint8Array
-
-        data = (line + "\r\n").encode("utf-8")
-        await self.writer.write(Uint8Array.new(data))
-
-    async def close(self) -> None:
+    Reading the body can raise when the response was not JSON (or when the
+    platform already rejected it), and an error message must never be the
+    reason a form submission fails, so this is best effort.
+    """
+    status = getattr(resp, "status", "?")
+    try:
+        body = await resp.json()
+    except Exception:  # noqa: BLE001 - fall back to raw text
         try:
-            await self.writer.close()
-        except Exception:
-            pass
-        try:
-            self.socket.close()
-        except Exception:
-            pass
+            text = await resp.text()
+        except Exception:  # noqa: BLE001
+            return f"mailapi returned HTTP {status}"
+        return f"mailapi returned HTTP {status}: {text[:300]}"
 
+    if isinstance(body, dict) and isinstance(body.get("error"), dict):
+        err = body["error"]
+        return f"mailapi returned HTTP {status}: {err.get('code', 'error')}: {err.get('message', '')}"
 
-def _expect(code: int, line: str, expected: int, what: str) -> None:
-    if code != expected:
-        raise RuntimeError(f"SMTP {what}: expected {expected}, got {code} ({line})")
-
-
-def _single_value(value) -> str:
-    return value if value is not None else ""
+    return f"mailapi returned HTTP {status}: {json.dumps(body)[:300]}"
 
 
 async def send_email(
@@ -100,99 +81,57 @@ async def send_email(
     html: str,
     from_name: str | None = None,
     *,
-    connect=None,
-    host: str | None = None,
-    port: int | None = None,
-) -> None:
-    """Send a plain-HTML email through the configured SMTP server.
+    post=None,
+    text: str | None = None,
+) -> dict:
+    """Send an HTML email via mailapi.
 
-    Environment variables used (from the Worker ``env`` binding):
-      HOST_EMAIL, HOST_PASSWORD (required; HOST_EMAIL is the MAIL FROM sender)
-      SMTP_USERNAME (optional; defaults to HOST_EMAIL — needed for providers
-        like Cloudflare Email Sending whose AUTH username differs from the
-        sender address, e.g. ``api_token``)
-      SMTP_HOST (default smtp.hostinger.com), SMTP_PORT (default 465)
-      EMAIL_TO (defaults to HOST_EMAIL), EMAIL_FROM_NAME
+    Returns mailapi's JSON response (message id, accepted/rejected recipients)
+    so callers can log or act on it. Raises RuntimeError when mailapi rejects
+    the request, so the existing ``try/except`` in ``worker.py`` still works.
+
+    ``to`` may be a single address or a comma-separated list.
     """
-    if connect is None:
-        connect = _connect_socket
-    host = host or _single_value(getattr(env, "SMTP_HOST", None)) or "smtp.hostinger.com"
-    port = int(port or _single_value(getattr(env, "SMTP_PORT", None)) or 465)
-    sender = _single_value(getattr(env, "HOST_EMAIL", None))
-    password = _single_value(getattr(env, "HOST_PASSWORD", None))
-    username = _single_value(getattr(env, "SMTP_USERNAME", None)) or sender
-    name = from_name or _single_value(getattr(env, "EMAIL_FROM_NAME", None)) or "Broadway Lounge"
+    if post is None:
+        post = _post
 
-    if not sender or not password:
-        raise RuntimeError("HOST_EMAIL / HOST_PASSWORD environment variables are not set")
-    if port == 25:
-        raise RuntimeError("Cloudflare Workers cannot connect to SMTP port 25; use 465 or 587")
+    base_url = _single_value(getattr(env, "MAILAPI_URL", None)).strip()
+    api_key = _single_value(getattr(env, "MAILAPI_KEY", None)).strip()
 
-    secure_transport = "on" if port == 465 else ("starttls" if port == 587 else "off")
-
-    socket = connect(host, port, secure_transport)
-    session = _SmtpSession(socket)
-    try:
-        code, line = await session.read_response()
-        _expect(code, line, 220, "greeting")
-
-        await session.send(f"EHLO {host}")
-        code, line = await session.read_response()
-        _expect(code, line, 250, "EHLO")
-
-        if secure_transport == "starttls":
-            socket = socket.startTls()
-            session = _SmtpSession(socket)
-            await session.send(f"EHLO {host}")
-            code, line = await session.read_response()
-            _expect(code, line, 250, "EHLO after STARTTLS")
-
-        # Authenticate: prefer AUTH LOGIN, fall back to AUTH PLAIN.
-        await session.send("AUTH LOGIN")
-        code, line = await session.read_response()
-        if code == 334:
-            await session.send(_b64(username))
-            code, line = await session.read_response()
-            if code == 334:
-                await session.send(_b64(password))
-                code, line = await session.read_response()
-            _expect(code, line, 235, "AUTH LOGIN")
-        else:
-            auth_plain = f"\x00{username}\x00{password}"
-            await session.send(f"AUTH PLAIN {_b64(auth_plain)}")
-            code, line = await session.read_response()
-            _expect(code, line, 235, "AUTH PLAIN")
-
-        await session.send(f"MAIL FROM:<{sender}>")
-        code, line = await session.read_response()
-        _expect(code, line, 250, "MAIL FROM")
-        await session.send(f"RCPT TO:<{to}>")
-        code, line = await session.read_response()
-        _expect(code, line, 250, "RCPT TO")
-        await session.send("DATA")
-        code, line = await session.read_response()
-        _expect(code, line, 354, "DATA")
-
-        safe_subject = str(subject).replace("\r", " ").replace("\n", " ")
-        body = "\r\n".join(
-            [
-                f"From: {name} <{sender}>",
-                f"To: {to}",
-                f"Subject: {safe_subject}",
-                "MIME-Version: 1.0",
-                "Content-Type: text/html; charset=UTF-8",
-                "Content-Transfer-Encoding: 8bit",
-                "",
-                str(html),
-            ]
+    if not base_url or not api_key:
+        raise RuntimeError(
+            "MAILAPI_URL and MAILAPI_KEY must be set. In production: "
+            "`wrangler secret put MAILAPI_URL` and `wrangler secret put MAILAPI_KEY`."
         )
-        # Dot-stuffing: lines starting with "." get an extra dot.
-        await session.send(re.sub(r"\r\n\.", "\r\n..", body))
-        await session.send(".")
-        code, line = await session.read_response()
-        _expect(code, line, 250, "message body")
+    if not to:
+        raise RuntimeError("No recipient: set EMAIL_TO in the Worker environment")
 
-        await session.send("QUIT")
-        await session.read_response()
-    finally:
-        await session.close()
+    recipients = [addr.strip() for addr in str(to).split(",") if addr.strip()]
+
+    payload: dict = {
+        "to": recipients,
+        "subject": str(subject).replace("\r", " ").replace("\n", " "),
+        "html": str(html),
+    }
+
+    # Optional keys are omitted rather than sent empty, so mailapi's own
+    # defaults (account fromName, auto-generated plain-text part) apply.
+    if text:
+        payload["text"] = str(text)
+    account = _single_value(getattr(env, "MAILAPI_ACCOUNT", None)).strip()
+    if account:
+        payload["account"] = account
+    name = (from_name or _single_value(getattr(env, "EMAIL_FROM_NAME", None))).strip()
+    if name:
+        payload["fromName"] = name
+
+    resp = await post(base_url, api_key, payload)
+
+    status = getattr(resp, "status", None)
+    if status is None or not 200 <= int(status) < 300:
+        raise RuntimeError(await _describe_failure(resp))
+
+    try:
+        return await resp.json()
+    except Exception:  # noqa: BLE001 - a 2xx with no body still counts as sent
+        return {"status": "sent"}

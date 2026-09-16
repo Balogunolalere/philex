@@ -2,8 +2,8 @@
 
 The pages are pre-rendered to ./dist by scripts/build.mjs and served from the
 ASSETS binding (see the "Serve a frontend" section of Cloudflare's FastAPI
-guide). This app handles the two form POSTs (emails sent over SMTP via
-src/mailer.py) and proxies everything else to the asset store.
+guide). This app handles the two form POSTs (emails sent through the mailapi
+service via src/mailer.py) and proxies everything else to the asset store.
 
 Run locally:   uv run pywrangler dev
 Deploy:        uv run pywrangler deploy
@@ -81,7 +81,7 @@ async def contact_us(
         try:
             await send_email(
                 env,
-                to=_env_value(env, "EMAIL_TO") or _env_value(env, "HOST_EMAIL"),
+                to=_env_value(env, "EMAIL_TO"),
                 subject=f"Contact Form: {value['name']}",
                 html=html,
             )
@@ -116,7 +116,7 @@ async def reserve_table(
         try:
             await send_email(
                 env,
-                to=_env_value(env, "EMAIL_TO") or _env_value(env, "HOST_EMAIL"),
+                to=_env_value(env, "EMAIL_TO"),
                 subject="Table Reservation Request",
                 html=html,
             )

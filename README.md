@@ -2,8 +2,8 @@
 
 The site runs on **Cloudflare Python Workers** with **FastAPI**, deployed with
 `uv` + `pywrangler` (Cloudflare's official Python Workers tooling). Pages are
-pre-rendered static HTML served from Cloudflare's CDN; FastAPI handles the
-form POSTs and emails them over SMTP (Hostinger). Free tier, auto-deploys.
+pre-rendered static HTML served from Cloudflare's CDN; FastAPI handles the form
+POSTs and emails them through the **mailapi** service. Free tier, auto-deploys.
 
 Followed Cloudflare's official guides/examples:
 - FastAPI on Python Workers: https://developers.cloudflare.com/workers/languages/python/packages/fastapi/
@@ -23,15 +23,26 @@ breakage), and the demo-only snippets (Google Tag Manager, Zendesk chat, qode
 toolbar) are stripped. `scripts/normalize-static-assets.mjs` was a one-off
 cleanup that renamed the mirror's `file.css?ver=…` artifacts into servable
 names; keep it for reference but it should be a no-op now.
-| `POST /contact-us`, `POST /reserve-table` | `src/worker.py` (FastAPI) → `src/mailer.py` (SMTP over `cloudflare:sockets`) |
+| `POST /contact-us`, `POST /reserve-table` | `src/worker.py` (FastAPI) → `src/mailer.py` (HTTP POST to mailapi) |
 | `/reservations` (legacy) | 301 → `/bar` |
 | Other unmatched paths | FastAPI catch-all proxies to `ASSETS` (official pattern) |
 
-- `src/mailer.py` implements SMTP (EHLO, AUTH LOGIN with AUTH PLAIN fallback,
-  dot-stuffing) over Cloudflare's TCP socket API — Python's `socket` module is
-  not available in Workers; the FFI (`import_from_javascript("cloudflare:sockets")`)
-  is used instead. Defaults: `smtp.hostinger.com:465` (implicit TLS) or `587`
-  (STARTTLS). Port 25 is blocked by Cloudflare.
+- `src/mailer.py` POSTs to a **mailapi** deployment over ordinary `fetch`. No
+  SMTP happens in this Worker, so it needs no mailbox password — only the
+  mailapi URL and an API key, both held as Cloudflare secrets. mailapi owns the
+  Hostinger SMTP accounts and does the actual delivery (see the sibling
+  `mailapi` project).
+
+- **Why not send SMTP directly from the Worker?** Because it does not work
+  reliably here. Workers can create outbound TCP sockets via
+  `cloudflare:sockets`, but Cloudflare blocks outbound port `25` outright and
+  the `465`/`587` submission path has not worked on this free-plan Worker. The
+  Worker's supported outbound mechanism is `fetch`, which is HTTP(S) only — so
+  reaching an SMTP server means going through something outside Cloudflare that
+  can open the socket. That is exactly what mailapi is: an HTTP endpoint that
+  performs the SMTP conversation from a host that permits it. The earlier
+  `cloudflare:sockets` implementation in this repo is what proved the problem;
+  it is in git history and should not be revived.
 
 ## Local development
 
@@ -50,10 +61,9 @@ again whenever you change `templates/` or `static/`.
 For form tests, create `.dev.vars` (gitignored) in the project root:
 
 ```bash
-HOST_EMAIL=info@yourdomain.com
-HOST_PASSWORD=your-mailbox-password
-SMTP_HOST=smtp.hostinger.com
-SMTP_PORT=465
+MAILAPI_URL=https://your-mailapi.vercel.app
+MAILAPI_KEY=your-mailapi-api-key
+EMAIL_TO=info@philexentertainment.com
 ```
 
 ## Deploy
@@ -69,12 +79,11 @@ in the dashboard under **Settings → Variables and Secrets**):
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `HOST_EMAIL` | yes | mailbox address (sender + default recipient) |
-| `HOST_PASSWORD` | yes | Hostinger mailbox password |
-| `SMTP_HOST` | no | default `smtp.hostinger.com` |
-| `SMTP_PORT` | no | default `465` (use `587` for STARTTLS) |
-| `EMAIL_TO` | no | overrides the recipient (default `HOST_EMAIL`) |
-| `EMAIL_FROM_NAME` | no | default `Broadway Lounge` |
+| `MAILAPI_URL` | yes | base URL of your mailapi deployment, no trailing slash |
+| `MAILAPI_KEY` | yes | API key from mailapi's `API_KEYS`; Cloudflare owns it |
+| `EMAIL_TO` | yes | where contact/reservation mail is delivered |
+| `EMAIL_FROM_NAME` | no | display name on the From header; unset uses mailapi's account `fromName` |
+| `MAILAPI_ACCOUNT` | no | only needed if the key is scoped to more than one account |
 
 Local `.dev.vars` is used by `pywrangler dev` automatically; production uses
 the secrets above.
@@ -100,8 +109,8 @@ command builds it first).
 > `npm error ... ENOENT ... /opt/buildhome/repo/package.json`, that's a stale
 > Netlify site still connected to the GitHub repo (its dashboard build command
 > is `npm run build`, but this repo has no `package.json` since the Cloudflare
-> migration — Netlify also can't run the Worker, which needs Cloudflare's
-> `cloudflare:sockets` API). Delete the site under Netlify → Site configuration
+> migration — and Netlify cannot run a Cloudflare Python Worker at all). Delete
+> the site under Netlify → Site configuration
 > → Danger zone, or at least disconnect the repo.
 
 > **Troubleshooting: `The directory specified by the "assets.directory" field
@@ -134,15 +143,17 @@ platform (free plan also gives DNS + CDN):
   errors, the cheapest fix is removing `"run_worker_first": true` from
   `wrangler.jsonc` (pages then get served straight from the CDN without
   invoking Python) — or moving to the Workers Paid plan.
-- SMTP from serverless IPs can occasionally be throttled by mail providers;
-  check Worker logs for `contact-us: send failed` / `reserve-table: send
-  failed`.
+- Mail delivery no longer happens in the Worker, so sending mail costs the
+  Worker almost no CPU — it makes one outbound `fetch` and awaits the reply.
+  Delivery problems now surface in **mailapi's** logs, not here; check Worker
+  logs for `contact-us: send failed` / `reserve-table: send failed` to see
+  mailapi's error message.
 
 ## Layout
 
 ```
 src/worker.py      FastAPI app + WorkerEntrypoint (ASGI)
-src/mailer.py      SMTP over cloudflare:sockets
+src/mailer.py      HTTP client for the mailapi service
 scripts/build.mjs  renders templates/ -> dist/ and copies static/
 templates/         Jinja2 templates (source of truth)
 static/            images, fonts, etc.
