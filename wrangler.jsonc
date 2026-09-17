@@ -7,6 +7,15 @@
     "python_workers",
     "python_dedicated_snapshot"
   ],
+  // Non-secret config lives here so it is visible and version-controlled.
+  // MAILAPI_KEY is deliberately NOT here: it is a Cloudflare Secret, set only
+  // in the dashboard (Settings -> Variables and Secrets). Never put a secret in
+  // this file - it is committed to git. The dashboard's "keep deployments in
+  // sync" banner suggests moving it here; ignore that for the key.
+  "vars": {
+    "MAILAPI_URL": "https://mailapi-lemon.vercel.app",
+    "EMAIL_TO": "info@philexentertainment.com"
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
