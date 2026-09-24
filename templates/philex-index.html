@@ -3027,6 +3027,56 @@
 			bottom: 70px;
 		}
 	</style>
+	<!-- The BLAQ Xperience — ticket hero + popup -->
+	<style>
+		/* ==== The BLAQ Xperience: ticket hero ==== */
+		/* The gallery section below pulls itself up by ~89px on this theme; the extra
+		   bottom padding keeps that overlap on empty background instead of the poster. */
+		.blaqx-hero { position: relative; overflow: hidden; padding: 54px 20px 112px; background: linear-gradient(135deg, #0b1f1e 0%, #102B2A 48%, #163a38 100%); border-top: 1px solid rgba(196, 152, 113, .32); border-bottom: 1px solid rgba(196, 152, 113, .32); }
+		.blaqx-hero::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 12% 18%, rgba(196, 152, 113, .18), transparent 55%); pointer-events: none; }
+		.blaqx-hero__inner { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 44px; max-width: 1150px; margin: 0 auto; }
+		.blaqx-hero__copy { flex: 1 1 430px; min-width: 0; text-align: center; }
+		.blaqx-hero__eyebrow { margin: 0 0 14px; color: #C49871; font-size: 13px; font-weight: 500; letter-spacing: .3em; text-transform: uppercase; }
+		.blaqx-hero__title { margin: 0 0 18px; color: #fff; font-family: "Cinzel", "Cormorant", "Jost", serif; font-size: clamp(36px, 5.4vw, 62px); font-weight: 600; line-height: 1.06; letter-spacing: .03em; text-transform: uppercase; }
+		.blaqx-hero__title-accent { display: block; color: #C49871; }
+		.blaqx-hero__meta { margin: 0 0 10px; color: #CED8D8; font-size: 19px; line-height: 1.5; }
+		.blaqx-hero__note { margin: 0 0 28px; color: rgba(206, 216, 216, .72); font-size: 16px; line-height: 1.6; }
+		.blaqx-hero__art { display: block; flex: 0 1 330px; }
+		.blaqx-hero__art img { display: block; width: 100%; height: auto; border-radius: 16px; border: 1px solid rgba(196, 152, 113, .45); box-shadow: 0 26px 60px rgba(0, 0, 0, .6); }
+		/* Gold ticket button, shared by the hero and the popup */
+		.blaqx-cta { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; padding: 17px 46px; border-radius: 60px; background: linear-gradient(135deg, #E3C298 0%, #C49871 48%, #AE8460 100%); color: #102B2A !important; font-size: 21px; font-weight: 600; letter-spacing: .1em; line-height: 1.2; text-transform: uppercase; text-decoration: none !important; box-shadow: 0 14px 34px rgba(196, 152, 113, .3); transition: transform .25s ease, box-shadow .25s ease; animation: blaqx-glow 3.4s ease-in-out infinite; }
+		.blaqx-cta:hover, .blaqx-cta:focus { transform: translateY(-2px); box-shadow: 0 18px 44px rgba(196, 152, 113, .5); }
+		.blaqx-cta__sub { font-size: 12px; font-weight: 400; letter-spacing: .18em; opacity: .78; }
+		@keyframes blaqx-glow { 0%, 100% { box-shadow: 0 14px 34px rgba(196, 152, 113, .3); } 50% { box-shadow: 0 14px 42px rgba(196, 152, 113, .6); } }
+		/* ==== The BLAQ Xperience: opening popup ==== */
+		.blaqx-modal { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 18px; opacity: 0; transition: opacity .28s ease; }
+		.blaqx-modal[hidden] { display: none; }
+		.blaqx-modal.is-open { opacity: 1; }
+		.blaqx-modal__backdrop { position: absolute; inset: 0; background: rgba(5, 15, 15, .9); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+		.blaqx-modal__panel { position: relative; z-index: 1; width: 100%; max-width: 440px; max-height: calc(100vh - 36px); overflow-y: auto; padding: 18px 18px 22px; border: 1px solid rgba(196, 152, 113, .42); border-radius: 20px; background: linear-gradient(180deg, #143433 0%, #0b1f1e 100%); box-shadow: 0 30px 80px rgba(0, 0, 0, .72); transform: translateY(16px) scale(.97); transition: transform .3s ease; }
+		.blaqx-modal.is-open .blaqx-modal__panel { transform: none; }
+		.blaqx-modal__close { position: absolute; top: 26px; right: 26px; z-index: 3; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0; border: 1px solid rgba(196, 152, 113, .55); border-radius: 50%; background: rgba(6, 16, 16, .74); color: #fff; font-size: 24px; line-height: 1; cursor: pointer; transition: background .2s ease, color .2s ease; }
+		.blaqx-modal__close:hover, .blaqx-modal__close:focus { background: #C49871; color: #102B2A; }
+		.blaqx-modal__art { display: block; }
+		.blaqx-modal__art img { display: block; width: auto; max-width: 100%; max-height: 48vh; height: auto; margin: 0 auto; border-radius: 12px; }
+		.blaqx-modal__cta { display: flex; flex-direction: column; align-items: center; width: 100%; margin: 18px 0 0; padding: 16px 22px; border-radius: 50px; font-size: 19px; }
+		.blaqx-modal__meta { margin: 14px 0 0; color: #CED8D8; font-size: 15px; line-height: 1.5; text-align: center; }
+		.blaqx-modal__url { margin: 8px 0 0; color: rgba(196, 152, 113, .85); font-size: 12.5px; letter-spacing: .04em; text-align: center; word-break: break-word; }
+		body.blaqx-modal-open { overflow: hidden; }
+		/* At or below 680px (the theme/mobile breakpoint) the gallery stops overlapping upward. */
+		@media (max-width: 680px) {
+			.blaqx-hero { padding: 38px 18px 44px; }
+			.blaqx-hero__inner { gap: 28px; }
+			.blaqx-hero__art { order: -1; flex: 0 1 270px; }
+			.blaqx-hero__meta { font-size: 17px; }
+			.blaqx-cta { padding: 16px 34px; font-size: 19px; }
+			.blaqx-modal__art img { max-height: 42vh; }
+		}
+		@media (prefers-reduced-motion: reduce) {
+			.blaqx-cta { animation: none; }
+			.blaqx-modal, .blaqx-modal__panel { transition: none; }
+		}
+	</style>
 </head>
 
 <body
@@ -3073,6 +3123,29 @@
 									</div>
 									
 								</div>
+								<!-- The BLAQ Xperience — ticket hero -->
+								<section class="blaqx-hero" aria-labelledby="blaqx-hero-title">
+									<div class="blaqx-hero__inner">
+										<div class="blaqx-hero__copy">
+											<p class="blaqx-hero__eyebrow">Philex Records presents</p>
+											<h2 class="blaqx-hero__title" id="blaqx-hero-title">The Blaq<span class="blaqx-hero__title-accent">Xperience</span></h2>
+											<p class="blaqx-hero__meta">Sunday 11th October &middot; Jogor Centre, Ibadan</p>
+											<p class="blaqx-hero__note">Tickets are on sale now &mdash; see Sadeblaq live. Secure your spot before they sell out.</p>
+											<a class="blaqx-cta" href="https://tix.africa/discover/theblaqexperience" target="_blank" rel="noopener noreferrer">
+												Buy Tickets
+												<span class="blaqx-cta__sub">tix.africa</span>
+											</a>
+										</div>
+										<a class="blaqx-hero__art" href="https://tix.africa/discover/theblaqexperience" target="_blank" rel="noopener noreferrer"
+											aria-label="Buy tickets for The BLAQ Xperience">
+											<img src="static/images/blaq-xperience-tickets-1200.jpg"
+												srcset="static/images/blaq-xperience-tickets-720.jpg 720w, static/images/blaq-xperience-tickets-1200.jpg 1200w"
+												sizes="(max-width: 680px) 270px, 330px"
+												width="1200" height="1697" loading="lazy" decoding="async"
+												alt="The BLAQ Xperience poster — Sadeblaq live at Jogor Centre, Ibadan, Sunday 11th October" />
+										</a>
+									</div>
+								</section>
 								<div class="elementor-element elementor-element-a2dc7a2 e-con-full e-flex e-con e-parent"
 									data-id="a2dc7a2" data-element_type="container">
 									<!-- empty placeholder SVG from the demo mirror removed (fixed 548x150 empty box) -->
@@ -3969,6 +4042,82 @@
 	<script type="text/javascript"
 		src="https://fidalgo.qodeinteractive.com/wp-content/plugins/fidalgo-core/inc/plugins/elementor/assets/js/elementor.min.js?ver=6.7.1"
 		id="fidalgo-core-elementor-js"></script>
+	<!-- The BLAQ Xperience — ticket popup (shown once per visit) -->
+	<div class="blaqx-modal" id="blaqx-modal" role="dialog" aria-modal="true" aria-label="The BLAQ Xperience — buy tickets" hidden>
+		<div class="blaqx-modal__backdrop" data-blaqx-close></div>
+		<div class="blaqx-modal__panel">
+			<button type="button" class="blaqx-modal__close" data-blaqx-close aria-label="Close">&times;</button>
+			<a class="blaqx-modal__art" href="https://tix.africa/discover/theblaqexperience" target="_blank" rel="noopener noreferrer"
+				aria-label="Buy tickets for The BLAQ Xperience">
+				<img src="static/images/blaq-xperience-tickets-720.jpg"
+					srcset="static/images/blaq-xperience-tickets-720.jpg 720w, static/images/blaq-xperience-tickets-1200.jpg 1200w"
+					sizes="(max-width: 480px) 88vw, 404px"
+					width="720" height="1018" decoding="async"
+					alt="The BLAQ Xperience poster — Sadeblaq live at Jogor Centre, Ibadan, Sunday 11th October" />
+			</a>
+			<a class="blaqx-cta blaqx-modal__cta" href="https://tix.africa/discover/theblaqexperience" target="_blank" rel="noopener noreferrer">
+				Buy Tickets
+				<span class="blaqx-cta__sub">Secure your spot</span>
+			</a>
+			<p class="blaqx-modal__meta">Sunday 11th October &middot; Jogor Centre, Ibadan</p>
+			<p class="blaqx-modal__url">tix.africa/discover/theblaqexperience</p>
+		</div>
+	</div>
+	<script>
+		(function () {
+			var modal = document.getElementById("blaqx-modal");
+			if (!modal) { return; }
+			var STORAGE_KEY = "blaqxTicketPopupSeen";
+			var shown = false;
+			try { shown = window.sessionStorage.getItem(STORAGE_KEY) === "1"; } catch (e) { shown = false; }
+			if (shown) { return; }
+
+			var lastFocused = null;
+			var closeTimer = null;
+
+			function open() {
+				lastFocused = document.activeElement;
+				modal.hidden = false;
+				window.requestAnimationFrame(function () { modal.classList.add("is-open"); });
+				document.body.classList.add("blaqx-modal-open");
+				var cta = modal.querySelector(".blaqx-modal__cta");
+				if (cta) { cta.focus({ preventScroll: true }); }
+				document.addEventListener("keydown", onKeydown);
+				try { window.sessionStorage.setItem(STORAGE_KEY, "1"); } catch (e) { /* private mode */ }
+			}
+
+			function close() {
+				modal.classList.remove("is-open");
+				document.body.classList.remove("blaqx-modal-open");
+				document.removeEventListener("keydown", onKeydown);
+				window.clearTimeout(closeTimer);
+				closeTimer = window.setTimeout(function () { modal.hidden = true; }, 260);
+				if (lastFocused && lastFocused.focus) { lastFocused.focus({ preventScroll: true }); }
+			}
+
+			function onKeydown(event) {
+				if (event.key === "Escape") { close(); return; }
+				if (event.key !== "Tab") { return; }
+				var focusables = modal.querySelectorAll("a[href], button:not([disabled])");
+				if (!focusables.length) { return; }
+				var first = focusables[0];
+				var last = focusables[focusables.length - 1];
+				if (event.shiftKey && document.activeElement === first) {
+					event.preventDefault();
+					last.focus();
+				} else if (!event.shiftKey && document.activeElement === last) {
+					event.preventDefault();
+					first.focus();
+				}
+			}
+
+			modal.addEventListener("click", function (event) {
+				if (event.target.closest("[data-blaqx-close]")) { close(); }
+			});
+
+			window.setTimeout(open, 700);
+		})();
+	</script>
 </body>
 
 </html>
