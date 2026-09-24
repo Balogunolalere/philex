@@ -59,6 +59,17 @@
 	}
 }
 
+/* The philex-index info sections ("INTRODUCING Sadeblaq…", "VISIONARY LEADERSHIP…")
+   hard-code 260px/295px copy columns inside ~690px columns, so the copy sits in a
+   narrow strip with a lot of dead space beside it and the headlines wrap to six
+   lines. Let the copy fill its column up to a readable measure. */
+.elementor-1604 .elementor-element.elementor-element-bac0bdb,
+.elementor-1604 .elementor-element.elementor-element-d1e7f04 {
+	--container-widget-width: 100% !important;
+	width: 100% !important;
+	max-width: 560px !important;
+}
+
 /* The philex-index info sections use desktop-percentage widths that the page's
    generated CSS bakes in per breakpoint; force them full-width on phones. */
 @media (max-width: 767px) {
@@ -72,12 +83,13 @@
 
 /* The page's generated CSS applies tablet values (`--padding-left: 135px`,
    `padding: 128px 0 135px`) down to phones, which leaves large empty space
-   and narrow text columns on mobile. Reset them for small screens. */
+   and narrow text columns on mobile. Reset them for small screens, keeping a
+   little breathing room so the copy doesn't sit flush against the box border. */
 @media (max-width: 680px) {
 	.elementor-1604 .elementor-element.elementor-element-28601f9,
 	.elementor-1604 .elementor-element.elementor-element-564d804 {
-		--padding-left: 0px !important;
-		--padding-right: 0px !important;
+		--padding-left: 22px !important;
+		--padding-right: 22px !important;
 	}
 
 	.elementor-1604 .elementor-element.elementor-element-bac0bdb > .elementor-widget-container,
