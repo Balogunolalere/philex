@@ -23,7 +23,7 @@ breakage), and the demo-only snippets (Google Tag Manager, Zendesk chat, qode
 toolbar) are stripped. `scripts/normalize-static-assets.mjs` was a one-off
 cleanup that renamed the mirror's `file.css?ver=…` artifacts into servable
 names; keep it for reference but it should be a no-op now.
-| `POST /contact-us`, `POST /reserve-table` | `src/worker.py` (FastAPI) → `src/mailer.py` (HTTP POST to mailapi) |
+| `POST /contact-us`, `POST /reserve-table`, `POST /free-ticket` | `src/worker.py` (FastAPI): screened by `src/spam.py`, mailed via `src/mailer.py` (`EMAIL_TO`) |
 | `/reservations` (legacy) | 301 → `/bar` |
 | Other unmatched paths | FastAPI catch-all proxies to `ASSETS` (official pattern) |
 
@@ -87,6 +87,27 @@ in the dashboard under **Settings → Variables and Secrets**):
 
 Local `.dev.vars` is used by `pywrangler dev` automatically; production uses
 the secrets above.
+
+## Forms and spam
+
+Every form on the site (contact, table reservation, free-ticket claim) goes
+through the same path in `src/worker.py`:
+
+1. **Screen** — `src/spam.py` drops automated posts: an off-canvas honeypot
+   field, and a minimum fill time (the page stamps an `elapsed` field via
+   `base.html`). A caught submission gets the normal thank-you, so a bot
+   learns nothing.
+2. **Mail** — `src/mailer.py` → mailapi → `EMAIL_TO`. The email is the record;
+   there is no database.
+
+There is no storage step and no per-IP cap. Both were removed with the Turso
+database: counting submissions per address needs shared state the Worker does
+not have, and losing a real enquiry is worse than accepting one spam entry.
+Submissions live in the site inbox — search it by name, or by subject
+(`Contact Form: …`, `Table Reservation: …`, `Free Ticket Claim: …`).
+
+A mailapi failure is logged (`<kind>: send failed`) and never surfaces: the
+visitor still gets the same redirect either way.
 
 ### Git push auto-deploy (optional)
 
@@ -154,6 +175,8 @@ platform (free plan also gives DNS + CDN):
 ```
 src/worker.py      FastAPI app + WorkerEntrypoint (ASGI)
 src/mailer.py      HTTP client for the mailapi service
+src/spam.py        honeypot / fill-time screen shared by every form
+scripts/test_forms.py   stdlib tests for the endpoints and the screen
 scripts/build.mjs  renders templates/ -> dist/ and copies static/
 templates/         Jinja2 templates (source of truth)
 static/            images, fonts, etc.

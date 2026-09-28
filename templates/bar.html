@@ -3318,7 +3318,7 @@
 								</div>
 
 
-								<div class="elementor-element elementor-element-02b3b39 e-con-full e-flex e-con e-parent"
+								<div id="reserve" class="elementor-element elementor-element-02b3b39 e-con-full e-flex e-con e-parent"
 									data-id="02b3b39" data-element_type="container"
 									data-settings="{&quot;background_background&quot;:&quot;classic&quot;}">
 									<div class="elementor-element elementor-element-60c14a5 e-con-full qodef-elementor-content-grid e-flex e-con e-child"
@@ -3459,12 +3459,30 @@
 																	</select>
 																</div>
 
+																<div class="qodef-m-field qodef-m-field-name">
+																	<input type="text" name="name" class="qodef-m-input" placeholder="Name"
+																		required autocomplete="name" style="margin-bottom: 0;" />
+																</div>
+																<div class="qodef-m-field qodef-m-field-email">
+																	<input type="email" name="email" class="qodef-m-input" placeholder="E mail"
+																		required autocomplete="email" style="margin-bottom: 0;" />
+																</div>
+																<div class="qodef-m-field qodef-m-field-phone">
+																	<input type="tel" name="phone" class="qodef-m-input" placeholder="Phone"
+																		required autocomplete="phone" style="margin-bottom: 0;" />
+																</div>
+
 																<div class="qodef-m-field qodef-m-field-book">
 																	<button type="submit"
 																		class="qodef-shortcode qodef-m  qodef-button qodef-layout--outlined qodef-size--normal ">
 																		<span class="qodef-btn-text">Book
 																			now</span></button>
 																</div>
+																<!-- Anti-spam: off-canvas honeypot plus the fill-time stamp set by base.html. -->
+																<div aria-hidden="true" style="position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;">
+																	<input type="text" name="website" tabindex="-1" autocomplete="off" value="" />
+																</div>
+																<input type="hidden" name="elapsed" value="" />
 																<input type="hidden" name="datetime" class="datetime"
 																	value="" />
 															</form>
@@ -3509,7 +3527,183 @@
 								</div>
 
 
-								<div class="elementor-element elementor-element-2babc20 e-con-full e-flex e-con e-parent"
+								<!-- The BLAQ Xperience -- free ticket giveaway -->
+								<style>
+									/* ==== The BLAQ Xperience free-ticket giveaway (bar page) ==== */
+									.barx-free { padding: 72px 20px; background: linear-gradient(135deg, #0b1f1e 0%, #102B2A 48%, #163a38 100%); border-top: 1px solid rgba(196, 152, 113, .32); border-bottom: 1px solid rgba(196, 152, 113, .32); }
+									.barx-free__inner { max-width: 720px; margin: 0 auto; text-align: center; }
+									.barx-free__eyebrow { margin: 0 0 14px; color: #C49871; font-size: 13px; font-weight: 500; letter-spacing: .3em; text-transform: uppercase; }
+									.barx-free__title { margin: 0 0 20px; color: #fff; font-family: "Cinzel", "Cormorant", "Jost", serif; font-size: clamp(32px, 4.6vw, 52px); font-weight: 600; line-height: 1.08; letter-spacing: .03em; text-transform: uppercase; }
+									.barx-free__lead { margin: 0 0 28px; color: #CED8D8; font-size: 18px; line-height: 1.7; }
+									.barx-free__lead strong { color: #fff; font-weight: 500; }
+									.barx-free__note { margin: 22px 0 0; color: rgba(206, 216, 216, .72); font-size: 15px; }
+									.barx-free__note a { color: #C49871; text-decoration: underline; }
+									.barx-free__note a:hover { color: #E3C298; }
+									.barx-free__art { max-width: 660px; margin: 34px auto 0; }
+									.barx-free__art img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid rgba(196, 152, 113, .45); }
+									.barx-btn { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; padding: 17px 46px; border: 0; border-radius: 60px; background: linear-gradient(135deg, #E3C298 0%, #C49871 48%, #AE8460 100%); color: #102B2A; font-family: inherit; font-size: 21px; font-weight: 600; letter-spacing: .1em; line-height: 1.2; text-transform: uppercase; text-decoration: none; cursor: pointer; box-shadow: 0 14px 34px rgba(196, 152, 113, .3); transition: transform .25s ease, box-shadow .25s ease; }
+									.barx-btn:hover, .barx-btn:focus { transform: translateY(-2px); box-shadow: 0 18px 44px rgba(196, 152, 113, .5); color: #102B2A; }
+									.barx-btn__sub { font-size: 12px; font-weight: 400; letter-spacing: .18em; opacity: .78; }
+									.barx-btn--block { width: 100%; padding: 16px 22px; font-size: 19px; }
+									/* the theme's `button[type="submit"]` rule (0,1,1) re-adds width:auto and its own padding */
+									.barx-modal .barx-btn--block { width: 100%; padding: 16px 22px; }
+									.barx-btn--ghost { margin-top: 18px; padding: 12px 30px; border: 1px solid rgba(196, 152, 113, .55); background: transparent; color: #C49871; font-size: 16px; box-shadow: none; }
+									.barx-btn--ghost:hover, .barx-btn--ghost:focus { background: rgba(196, 152, 113, .12); color: #E3C298; transform: none; box-shadow: none; }
+									.barx-modal { position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; padding: 18px; opacity: 0; transition: opacity .28s ease; }
+									.barx-modal[hidden] { display: none; }
+									.barx-modal.is-open { opacity: 1; }
+									.barx-modal__backdrop { position: absolute; inset: 0; background: rgba(5, 15, 15, .9); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+									.barx-modal__panel { position: relative; z-index: 1; width: 100%; max-width: 460px; max-height: calc(100vh - 36px); overflow-y: auto; padding: 30px 26px 26px; border: 1px solid rgba(196, 152, 113, .42); border-radius: 20px; background: linear-gradient(180deg, #143433 0%, #0b1f1e 100%); box-shadow: 0 30px 80px rgba(0, 0, 0, .72); transform: translateY(16px) scale(.97); transition: transform .3s ease; }
+									.barx-modal.is-open .barx-modal__panel { transform: none; }
+									.barx-modal__close { position: absolute; top: 14px; right: 14px; z-index: 3; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0; border: 1px solid rgba(196, 152, 113, .55); border-radius: 50%; background: rgba(6, 16, 16, .74); color: #fff; font-size: 24px; line-height: 1; cursor: pointer; transition: background .2s ease, color .2s ease; }
+									.barx-modal__close:hover, .barx-modal__close:focus { background: #C49871; color: #102B2A; }
+									.barx-claim__heading { margin: 0 0 8px; padding-right: 34px; color: #fff; font-family: "Cinzel", "Cormorant", "Jost", serif; font-size: 25px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+									.barx-claim__intro { margin: 0 0 22px; color: #C49871; font-size: 14px; letter-spacing: .04em; }
+									.barx-field { display: block; margin: 0 0 16px; text-align: left; }
+									.barx-field > span { display: block; margin-bottom: 6px; color: #CED8D8; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+									.barx-field input { width: 100%; margin: 0; padding: 13px 15px; border: 1px solid rgba(196, 152, 113, .38); border-radius: 10px; background: rgba(5, 15, 15, .55); color: #fff; font-family: inherit; font-size: 16px; }
+									.barx-field input:focus { outline: none; border-color: #C49871; box-shadow: 0 0 0 3px rgba(196, 152, 113, .18); }
+									.barx-field--hidden { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+									.barx-claim__fine { margin: 14px 0 0; color: rgba(206, 216, 216, .68); font-size: 12.5px; line-height: 1.6; }
+									.barx-claim__thanks { text-align: center; }
+									.barx-claim__thanks p { color: #CED8D8; font-size: 16px; line-height: 1.65; }
+									body.barx-modal-open { overflow: hidden; }
+									@media (max-width: 680px) {
+										.barx-free { padding: 46px 18px; }
+										.barx-free__lead { font-size: 16.5px; }
+										.barx-btn { padding: 16px 34px; font-size: 19px; }
+									}
+									@media (prefers-reduced-motion: reduce) {
+										.barx-modal, .barx-modal__panel, .barx-btn { transition: none; }
+									}
+								</style>
+								<section class="barx-free" aria-labelledby="barx-free-title">
+									<div class="barx-free__inner">
+										<p class="barx-free__eyebrow">Philex Records presents &middot; The BLAQ Xperience</p>
+										<h2 class="barx-free__title" id="barx-free-title">Someone paid for your ticket</h2>
+										<p class="barx-free__lead">
+											A friend of the house bought a handful of tickets to <strong>The BLAQ Xperience</strong>
+											&mdash; Sunday 11th October at Jogor Centre, Ibadan &mdash; and wants them given
+											out free. If you would love to be there, fill the short form and we&rsquo;ll send
+											your ticket to your email. One ticket per person, while they last.
+										</p>
+										<button type="button" class="barx-btn" id="barx-open">
+											Claim a free ticket
+											<span class="barx-btn__sub">one per person</span>
+										</button>
+										<p class="barx-free__note">Already coming? <a href="#reserve">Book a table at the lounge</a> while you&rsquo;re here.</p>
+																				<div class="barx-free__art">
+											<img src="static/images/blaq-xperience-ticket-1400.png"
+												srcset="static/images/blaq-xperience-ticket-900.png 900w, static/images/blaq-xperience-ticket-1400.png 1400w"
+												sizes="(max-width: 680px) 92vw, 660px"
+												width="1400" height="396" loading="lazy" decoding="async"
+											alt="The BLAQ Xperience ticket — Jogor Centre, Ibadan, Sunday 11th October, 2PM" />
+										</div>
+									</div>
+								</section>
+
+								<div class="barx-modal" id="barx-claim" role="dialog" aria-modal="true" aria-labelledby="barx-claim-title" hidden>
+									<div class="barx-modal__backdrop" data-barx-close></div>
+									<div class="barx-modal__panel">
+										<button type="button" class="barx-modal__close" data-barx-close aria-label="Close">&times;</button>
+										<div class="barx-claim__thanks" id="barx-thanks" hidden>
+											<h3 class="barx-claim__heading">You&rsquo;re on the list</h3>
+											<p>Your claim is in. We&rsquo;ll email your ticket to the address you gave us &mdash; see you at Jogor Centre, Ibadan on Sunday 11th October.</p>
+											<button type="button" class="barx-btn barx-btn--ghost" data-barx-close>Close</button>
+										</div>
+										<form class="barx-claim__form" id="barx-form" action="/free-ticket" method="post">
+											<h3 class="barx-claim__heading" id="barx-claim-title">Claim your free ticket</h3>
+											<p class="barx-claim__intro">The BLAQ Xperience &middot; Sunday 11th October &middot; Jogor Centre, Ibadan</p>
+											<label class="barx-field">
+												<span>Full name</span>
+												<input type="text" name="name" required autocomplete="name" placeholder="Your name" />
+											</label>
+											<label class="barx-field">
+												<span>Email</span>
+												<input type="email" name="email" required autocomplete="email" placeholder="you@example.com" />
+											</label>
+											<label class="barx-field">
+												<span>Phone</span>
+												<input type="tel" name="phone" required autocomplete="tel" placeholder="080 0000 0000" />
+											</label>
+											<!-- honeypot: off-canvas for people, tempting for bots -->
+											<label class="barx-field barx-field--hidden" aria-hidden="true">
+												<span>Website</span>
+												<input type="text" name="website" tabindex="-1" autocomplete="off" />
+											</label>
+											<input type="hidden" name="elapsed" value="" />
+											<button type="submit" class="barx-btn barx-btn--block">Send my claim</button>
+											<p class="barx-claim__fine">We use your details only to send your ticket. Free tickets are limited and go to the first claimants.</p>
+										</form>
+									</div>
+								</div>
+								<script>
+									(function () {
+										var modal = document.getElementById("barx-claim");
+										var openBtn = document.getElementById("barx-open");
+										if (!modal || !openBtn) { return; }
+										var form = document.getElementById("barx-form");
+										var thanks = document.getElementById("barx-thanks");
+										var lastFocused = null;
+										var closeTimer = null;
+
+										function open() {
+											lastFocused = document.activeElement;
+											modal.hidden = false;
+											window.requestAnimationFrame(function () { modal.classList.add("is-open"); });
+											document.body.classList.add("barx-modal-open");
+											document.addEventListener("keydown", onKeydown);
+											var target = thanks && !thanks.hidden ? thanks.querySelector("button") : form.querySelector("input");
+											if (target) { target.focus({ preventScroll: true }); }
+										}
+
+										function close() {
+											modal.classList.remove("is-open");
+											document.body.classList.remove("barx-modal-open");
+											document.removeEventListener("keydown", onKeydown);
+											window.clearTimeout(closeTimer);
+											closeTimer = window.setTimeout(function () { modal.hidden = true; }, 260);
+											if (lastFocused && lastFocused.focus) { lastFocused.focus({ preventScroll: true }); }
+										}
+
+										function onKeydown(event) {
+											if (event.key === "Escape") { close(); return; }
+											if (event.key !== "Tab") { return; }
+											var focusables = modal.querySelectorAll("a[href], button:not([disabled]), input:not([type=hidden])");
+											if (!focusables.length) { return; }
+											var first = focusables[0];
+											var last = focusables[focusables.length - 1];
+											if (event.shiftKey && document.activeElement === first) {
+												event.preventDefault();
+												last.focus();
+											} else if (!event.shiftKey && document.activeElement === last) {
+												event.preventDefault();
+												first.focus();
+											}
+										}
+
+										function showThanks() {
+											if (thanks) { thanks.hidden = false; }
+											if (form) { form.hidden = true; }
+										}
+
+										openBtn.addEventListener("click", open);
+										modal.addEventListener("click", function (event) {
+											if (event.target.closest("[data-barx-close]")) { close(); }
+										});
+
+										/* back from a successful POST: /bar?claimed=1 */
+										if (/(?:^|[?&])claimed=1(?:&|$)/.test(window.location.search)) {
+											showThanks();
+											window.setTimeout(open, 300);
+											if (window.history.replaceState) {
+												window.history.replaceState(null, "", window.location.pathname);
+											}
+										}
+									})();
+								</script>
+
+<div class="elementor-element elementor-element-2babc20 e-con-full e-flex e-con e-parent"
 									data-id="2babc20" data-element_type="container">
 									<div class="elementor-element elementor-element-a321ff8 elementor-widget elementor-widget-fidalgo_core_section_title"
 										data-id="a321ff8" data-element_type="widget"

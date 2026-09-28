@@ -1590,6 +1590,12 @@
 																});
 															});
 															</script>
+														<!-- Anti-spam: the first field sits off-canvas (bots fill it in, people never
+															see it); the second is stamped with the fill time by base.html. -->
+														<div aria-hidden="true" style="position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden;">
+															<input type="text" name="website" tabindex="-1" autocomplete="off" value="" style="width: 100%;" />
+														</div>
+														<input type="hidden" name="elapsed" value="" />
 														</form>
 													</div>
 												</div>

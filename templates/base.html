@@ -3803,6 +3803,19 @@
     <div id="fidalgo-core-page-inline-style"
         data-style="@media only screen and (max-width: 1368px){.qodef-custom-font-689 { font-size: 85px!important;line-height: 100px!important;}.qodef-custom-font-669 { font-size: 85px!important;line-height: 100px!important;}.qodef-custom-font-893 { font-size: 85px!important;line-height: 100px!important;}}@media only screen and (max-width: 1200px){.qodef-custom-font-689 { font-size: 75px!important;line-height: 95px!important;}.qodef-custom-font-669 { font-size: 75px!important;line-height: 95px!important;}.qodef-custom-font-893 { font-size: 75px!important;line-height: 95px!important;}}@media only screen and (max-width: 880px){.qodef-custom-font-689 { font-size: 60px!important;line-height: 85px!important;letter-spacing: 9px!important;}.qodef-custom-font-669 { font-size: 60px!important;line-height: 85px!important;letter-spacing: 9px!important;}.qodef-custom-font-893 { font-size: 60px!important;line-height: 85px!important;letter-spacing: 9px!important;}.qodef-custom-font-480 { font-size: 55px!important;line-height: 57px!important;}}">
     </div>
+	<!-- Anti-spam: stamp how long the visitor took, so instantly-posted forms get
+	     dropped server-side (src/spam.py). One listener covers every form on the site. -->
+	<script>
+		(function () {
+			var loaded = Date.now();
+			document.addEventListener("submit", function (event) {
+				var form = event.target;
+				if (!form || !form.querySelector) { return; }
+				var field = form.querySelector('input[name="elapsed"]');
+				if (field) { field.value = String(Date.now() - loaded); }
+			}, true);
+		})();
+	</script>
 </body>
 
 </html>
