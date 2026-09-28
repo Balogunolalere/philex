@@ -131,6 +131,17 @@ mail.
 
 ### Free ticket claims
 
+**One ticket per address.** The claim insert itself refuses a repeat
+(`INSERT_ONCE_SQL` in `src/db.py`): it checks and writes in a single statement,
+so two claims posted at the same moment cannot both land, and addresses are
+compared case-folded and trimmed — `Ada@Example.com ` is the same person as
+`ada@example.com`. A repeat looks exactly like a first claim from the outside
+(same thank-you, same redirect) and is logged as
+`free-ticket: <address> has already claimed, no ticket sent`; no second row and
+no second ticket. Rows that were claimed before this rule existed are still in
+the table — `docs/schema.sql` explains how to promote the lookup index to a
+unique one once those are dealt with.
+
 The claim mail is the guest's ticket, so it is addressed to them, not to
 philex. It carries:
 

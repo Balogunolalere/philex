@@ -18,7 +18,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from db import COLUMNS, INSERT_SQL, endpoint, save_submission  # noqa: E402
+from db import (  # noqa: E402
+    COLUMNS,
+    INSERT_ONCE_SQL,
+    INSERT_SQL,
+    DuplicateClaim,
+    endpoint,
+    save_submission,
+)
 
 
 class Env:
@@ -93,10 +100,128 @@ def test_missing_url_fails_loudly():
 
 # --- the insert --------------------------------------------------------------
 def test_insert_covers_every_column():
-    for column in COLUMNS:
-        assert column in INSERT_SQL, f"{column} is missing from the insert"
-    assert INSERT_SQL.count("?") == len(COLUMNS), "one placeholder per column"
-    assert INSERT_SQL.startswith("insert into submissions"), INSERT_SQL
+    for sql in (INSERT_SQL, INSERT_ONCE_SQL):
+        for column in COLUMNS:
+            assert column in sql, f"{column} is missing from {sql}"
+        assert sql.count("?") == len(COLUMNS) + (1 if sql is INSERT_ONCE_SQL else 0), (
+            "one placeholder per column, plus the address to match for the guarded insert"
+        )
+        assert sql.startswith("insert into submissions"), sql
+
+
+def test_the_guard_is_part_of_the_insert_not_a_read_before_it():
+    """One statement: a check and a write sent separately can be split by a
+    second claim arriving in between."""
+    post = recorder()
+
+    asyncio.run(
+        save_submission(
+            good_env(),
+            kind="free-ticket",
+            name="Ada",
+            email="Ada@Example.COM",
+            once_per_email=True,
+            post=post,
+        )
+    )
+
+    requests = post.calls[0]["payload"]["requests"]
+    statements = [r for r in requests if r["type"] == "execute"]
+    assert len(statements) == 1, "one round trip, one statement"
+    stmt = statements[0]["stmt"]
+    assert stmt["sql"] == INSERT_ONCE_SQL
+    assert "not exists" in stmt["sql"] and "kind = 'free-ticket'" in stmt["sql"]
+    # The last argument is the address the guard compares against, folded the
+    # way the column is compared - case and stray spaces buy nothing.
+    assert stmt["args"][-1] == {"type": "text", "value": "ada@example.com"}
+    assert len(stmt["args"]) == len(COLUMNS) + 1
+
+
+def test_a_repeat_claim_writes_nothing_and_is_reported():
+    body = {
+        "results": [
+            {
+                "type": "ok",
+                "response": {
+                    "type": "execute",
+                    "result": {"rows_written": 0, "affected_row_count": 0, "last_insert_rowid": "7"},
+                },
+            }
+        ]
+    }
+
+    try:
+        asyncio.run(
+            save_submission(
+                good_env(),
+                kind="free-ticket",
+                email="ada@example.com",
+                once_per_email=True,
+                post=recorder(body=body),
+            )
+        )
+    except DuplicateClaim as exc:
+        assert "ada@example.com" in str(exc), str(exc)
+    else:
+        raise AssertionError("a claim that wrote nothing must be reported as a duplicate")
+
+
+def test_a_written_claim_is_not_reported_as_a_duplicate():
+    body = {
+        "results": [
+            {
+                "type": "ok",
+                "response": {
+                    "type": "execute",
+                    "result": {"rows_written": 2, "affected_row_count": 1, "last_insert_rowid": "123"},
+                },
+            }
+        ]
+    }
+
+    result = asyncio.run(
+        save_submission(
+            good_env(),
+            kind="free-ticket",
+            email="ada@example.com",
+            once_per_email=True,
+            post=recorder(body=body),
+        )
+    )
+
+    assert result["status"] == "stored" and result["row_id"] == "123"
+
+
+def test_a_silent_count_is_treated_as_stored():
+    """The pipeline always reports the count; if it ever did not, the guest -
+    not the duplicate rule - is what matters."""
+    body = {"results": [{"type": "ok", "response": {"type": "execute", "result": {}}}]}
+
+    result = asyncio.run(
+        save_submission(
+            good_env(),
+            kind="free-ticket",
+            email="ada@example.com",
+            once_per_email=True,
+            post=recorder(body=body),
+        )
+    )
+
+    assert result["status"] == "stored"
+
+
+def test_other_forms_are_not_guarded():
+    """The rule is one free ticket per address, not one form entry per address."""
+    post = recorder()
+
+    asyncio.run(
+        save_submission(good_env(), kind="contact", name="Ada", email="ada@example.com", post=post)
+    )
+
+    stmt = post.calls[0]["payload"]["requests"][0]["stmt"]
+    assert stmt["sql"] == INSERT_SQL
+    assert "not exists" not in stmt["sql"]
+    assert len(stmt["args"]) == len(COLUMNS)
 
 
 def test_sends_one_pipeline_request_with_every_value():

@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import inspect
+import io
 import sys
 import types
 from pathlib import Path
@@ -32,6 +34,12 @@ sys.modules["workers"] = workers_module
 
 sent: list[dict] = []
 stored: list[dict] = []
+claimed: set[str] = set()
+
+# The transports are stubbed by patching the real modules, so everything else in
+# them (attachment encoding, template rendering) runs as it does in production.
+import db as db_module  # noqa: E402
+import mailer as mailer_module  # noqa: E402
 
 
 async def fake_send_email(env, *, to, subject, html, attachments=None, reply_to=None, **_ignored):
@@ -60,9 +68,20 @@ async def fake_save_submission(
     booking_time="",
     ip="",
     user_agent="",
+    once_per_email=False,
     **_ignored,
 ):
-    """Mirrors the real client's signature so a test row has every column."""
+    """Mirrors the real client's signature so a test row has every column.
+
+    ``once_per_email`` behaves like the guarded insert in src/db.py: a repeat
+    claim for the same address stores nothing and raises DuplicateClaim.
+    """
+    if once_per_email:
+        address = email.strip().casefold()
+        if address in claimed:
+            raise db_module.DuplicateClaim(f"{address} has already claimed a ticket")
+        claimed.add(address)
+
     stored.append(
         {
             "kind": kind,
@@ -75,15 +94,11 @@ async def fake_save_submission(
             "booking_time": booking_time,
             "ip": ip,
             "user_agent": user_agent,
+            "once_per_email": once_per_email,
         }
     )
     return {"status": "stored"}
 
-
-# The transports are stubbed by patching the real modules, so everything else in
-# them (attachment encoding, template rendering) runs as it does in production.
-import db as db_module  # noqa: E402
-import mailer as mailer_module  # noqa: E402
 
 mailer_module.send_email = fake_send_email
 db_module.save_submission = fake_save_submission
@@ -309,6 +324,69 @@ def test_free_ticket_claim_is_stored_for_the_organisers():
     assert stored[0]["name"] == "Ada" and stored[0]["email"] == "ada@example.com"
 
 
+def test_the_ticket_claim_asks_the_database_to_refuse_repeats():
+    """The guard lives in the insert, so only the claim asks for it."""
+    call(worker.free_ticket, name="Ada", email="ada@example.com", phone="0801", **FORM_FIELDS)
+    assert stored[0]["once_per_email"] is True
+
+    call(worker.contact_us, name="Ada", email="ada@example.com", message="Hi", **FORM_FIELDS)
+    call(
+        worker.reserve_table,
+        name="Ada",
+        email="ada@example.com",
+        phone="0801",
+        partysize="2",
+        date="11/10/2026",
+        time="19:00",
+        **FORM_FIELDS,
+    )
+    assert [row["once_per_email"] for row in stored[1:]] == [False, False], (
+        "a reservation or a message from the same address is still accepted"
+    )
+
+
+def test_a_second_claim_from_the_same_address_gets_no_ticket():
+    first = call(worker.free_ticket, name="Ada", email="ada@example.com", phone="0801", **FORM_FIELDS)
+    assert len(sent) == 1
+
+    # Same person, typed differently: one more row would be one more guest.
+    second = call(worker.free_ticket, name="Ada Again", email="  ADA@Example.com ", phone="0801", **FORM_FIELDS)
+
+    assert len(sent) == 1, "no second ticket"
+    assert len(stored) == 1, "no second row for the organisers to add twice"
+    assert first.headers["location"] == second.headers["location"] == "/bar?claimed=1", (
+        "a repeat claim looks exactly like a first one, so nobody can probe the list"
+    )
+
+
+def test_a_repeat_claim_is_not_counted_as_a_storage_failure():
+    """DuplicateClaim is an answer, not an error - it must not be logged as one."""
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        call(worker.free_ticket, name="Ada", email="ada@example.com", phone="0801", **FORM_FIELDS)
+        call(worker.free_ticket, name="Ada", email="ada@example.com", phone="0801", **FORM_FIELDS)
+    printed = buffer.getvalue()
+
+    assert "already claimed" in printed, printed
+    assert "store failed" not in printed, printed
+
+
+def test_a_failed_store_still_sends_the_ticket():
+    """The row is the organisers' record, but the ticket is the guest's entry:
+    a database that is down must not cost someone their ticket."""
+    async def broken_save(env, **_kw):
+        raise RuntimeError("turso is down")
+
+    worker.save_submission = broken_save
+    try:
+        call(worker.free_ticket, name="Ada", email="ada@example.com", phone="0801", **FORM_FIELDS)
+    finally:
+        worker.save_submission = fake_save_submission
+
+    assert len(sent) == 1 and sent[0]["to"] == "ada@example.com"
+    assert sent[0]["attachments"], "the ticket still goes out"
+
+
 def test_a_missing_ticket_asset_still_mails_a_link():
     """A guest must not be stranded because the asset store hiccuped."""
     env = Env(assets=Assets(status=500))
@@ -399,6 +477,7 @@ def main():
         if name.startswith("test_") and callable(test):
             sent.clear()
             stored.clear()
+            claimed.clear()
             try:
                 test()
                 print(f"ok   {name}")

@@ -24,3 +24,20 @@ CREATE TABLE IF NOT EXISTS submissions (
   ip TEXT NOT NULL DEFAULT '',
   user_agent TEXT NOT NULL DEFAULT ''
 );
+
+-- Keeps the "has this address claimed?" lookup inside the guarded insert cheap
+-- as the table grows.
+--
+-- It is deliberately NOT unique. A unique index is the tidier statement of
+-- "one ticket per address", but it cannot be created while rows that predate
+-- the rule are in the table, and the duplicates already here are real claims
+-- the organisers may still be working from. The insert in src/db.py
+-- (INSERT_ONCE_SQL) is what actually enforces the rule: it checks and writes in
+-- a single statement, so two claims posted at the same moment cannot both land.
+--
+-- Once the historical duplicates are resolved, this can become:
+--   CREATE UNIQUE INDEX submissions_free_ticket_address_uniq
+--     ON submissions (kind, lower(trim(email))) WHERE kind = 'free-ticket';
+CREATE INDEX IF NOT EXISTS submissions_free_ticket_address
+  ON submissions (kind, lower(trim(email)))
+  WHERE kind = 'free-ticket';

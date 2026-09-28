@@ -26,7 +26,7 @@ from fastapi.responses import RedirectResponse, Response
 from workers import WorkerEntrypoint
 
 import spam
-from db import save_submission
+from db import DuplicateClaim, save_submission
 from mail_templates import TICKET_FILENAME, TICKET_SUBJECT, notification, ticket_delivery
 from mailer import attachment, send_email
 
@@ -78,18 +78,31 @@ def _client_info(request: Request) -> tuple[str, str]:
     return ip, _header(request, "user-agent")
 
 
-async def _record(env, *, kind: str, request: Request, **fields) -> None:
-    """Store a submission.
+async def _record(env, *, kind: str, request: Request, once_per_email: bool = False, **fields) -> str:
+    """Store a submission. Returns ``stored``, ``duplicate`` or ``failed``.
 
     Best effort, like the mail: losing a row is bad, but losing the visitor's
-    redirect is worse, so a failure is logged and swallowed.
+    redirect is worse, so a failure is logged and swallowed. ``duplicate`` is
+    the one answer the caller acts on - a free-ticket claim that this address
+    has already made, which must not be answered with a second ticket.
     """
     ip, user_agent = _client_info(request)
     try:
-        await save_submission(env, kind=kind, ip=ip, user_agent=user_agent, **fields)
+        await save_submission(
+            env,
+            kind=kind,
+            ip=ip,
+            user_agent=user_agent,
+            once_per_email=once_per_email,
+            **fields,
+        )
         print(f"{kind}: stored")
+        return "stored"
+    except DuplicateClaim:
+        return "duplicate"
     except Exception as exc:  # noqa: BLE001 - the visitor still gets their redirect
         print(f"{kind}: store failed: {exc!r}")
+        return "failed"
 
 
 async def _deliver(
@@ -249,10 +262,12 @@ async def free_ticket(
 ):
     """Handle free-ticket claims from the /bar giveaway popup.
 
-    The claimant gets the ticket, philex does not get a copy: the organisers
-    read the claim from the submissions table, and the guest is the one who
-    needs the mail. If the ticket art cannot be read, the claim is still mailed
-    with a link to it - a storage hiccup must not strand a guest at the door.
+    One ticket per address: the insert refuses a repeat claim, and a repeat is
+    answered with the ordinary thank-you and nothing else - no second ticket, no
+    second row. The organisers read claims from the submissions table; philex
+    does not get a copy. If the ticket art cannot be read, the claim is still
+    mailed with a link to it - a storage hiccup must not strand a guest at the
+    door.
     """
     env = request.scope["env"]
     value = {
@@ -268,24 +283,27 @@ async def free_ticket(
         print(f"free-ticket: invalid submission (name/email/phone required): {value!r}")
     else:
         # Stored before it is mailed: with no notification going to philex, this
-        # row is what the organisers work from.
-        await _record(env, kind="free-ticket", request=request, **value)
+        # row is what the organisers work from. `once_per_email` makes the
+        # insert itself refuse a second claim from the same address.
+        outcome = await _record(env, kind="free-ticket", request=request, once_per_email=True, **value)
+        if outcome == "duplicate":
+            print(f"free-ticket: {value['email']} has already claimed, no ticket sent")
+        else:
+            attachments: list[dict] = []
+            try:
+                ticket = await _asset_bytes(env, TICKET_ASSET)
+                attachments.append(attachment(TICKET_FILENAME, ticket, "image/png"))
+            except Exception as exc:  # noqa: BLE001 - fall back to linking the ticket
+                print(f"free-ticket: ticket attachment unavailable: {exc!r}")
 
-        attachments: list[dict] = []
-        try:
-            ticket = await _asset_bytes(env, TICKET_ASSET)
-            attachments.append(attachment(TICKET_FILENAME, ticket, "image/png"))
-        except Exception as exc:  # noqa: BLE001 - fall back to linking the ticket
-            print(f"free-ticket: ticket attachment unavailable: {exc!r}")
-
-        await _deliver(
-            env,
-            kind="free-ticket",
-            to=value["email"],
-            subject=TICKET_SUBJECT,
-            html=ticket_delivery(name=value["name"], attached=bool(attachments)),
-            attachments=attachments,
-        )
+            await _deliver(
+                env,
+                kind="free-ticket",
+                to=value["email"],
+                subject=TICKET_SUBJECT,
+                html=ticket_delivery(name=value["name"], attached=bool(attachments)),
+                attachments=attachments,
+            )
     return RedirectResponse(url="/bar?claimed=1", status_code=status.HTTP_302_FOUND)
 
 
