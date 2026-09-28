@@ -20,13 +20,27 @@ production, ``.dev.vars`` locally):
 
 from __future__ import annotations
 
+import base64
 import json
 
-__all__ = ["send_email"]
+__all__ = ["attachment", "send_email"]
 
 
 def _single_value(value) -> str:
     return value if value is not None else ""
+
+
+def attachment(filename: str, content: bytes, content_type: str) -> dict:
+    """Build one mailapi attachment.
+
+    mailapi takes attachment bodies as base64 strings (see its README), so the
+    encoding happens here rather than at every call site.
+    """
+    return {
+        "filename": filename,
+        "content": base64.b64encode(content).decode("ascii"),
+        "contentType": content_type,
+    }
 
 
 async def _post(base_url: str, api_key: str, payload: dict):
@@ -83,6 +97,8 @@ async def send_email(
     *,
     post=None,
     text: str | None = None,
+    attachments: list[dict] | None = None,
+    reply_to: str | None = None,
 ) -> dict:
     """Send an HTML email via mailapi.
 
@@ -90,7 +106,11 @@ async def send_email(
     so callers can log or act on it. Raises RuntimeError when mailapi rejects
     the request, so the existing ``try/except`` in ``worker.py`` still works.
 
-    ``to`` may be a single address or a comma-separated list.
+    ``to`` may be a single address or a comma-separated list. ``attachments``
+    are dicts in mailapi's shape - build them with ``attachment()``.
+    ``reply_to`` sends the visitor's own address on the internal notifications,
+    so hitting reply in the inbox answers the person who filled the form
+    instead of the mailbox the form posted to.
     """
     if post is None:
         post = _post
@@ -124,6 +144,10 @@ async def send_email(
     name = (from_name or _single_value(getattr(env, "EMAIL_FROM_NAME", None))).strip()
     if name:
         payload["fromName"] = name
+    if reply_to:
+        payload["replyTo"] = str(reply_to).strip()
+    if attachments:
+        payload["attachments"] = list(attachments)
 
     resp = await post(base_url, api_key, payload)
 

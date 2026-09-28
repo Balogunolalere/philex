@@ -23,7 +23,7 @@ breakage), and the demo-only snippets (Google Tag Manager, Zendesk chat, qode
 toolbar) are stripped. `scripts/normalize-static-assets.mjs` was a one-off
 cleanup that renamed the mirror's `file.css?ver=…` artifacts into servable
 names; keep it for reference but it should be a no-op now.
-| `POST /contact-us`, `POST /reserve-table`, `POST /free-ticket` | `src/worker.py` (FastAPI): screened by `src/spam.py`, mailed via `src/mailer.py` (`EMAIL_TO`) |
+| `POST /contact-us`, `POST /reserve-table`, `POST /free-ticket` | `src/worker.py` (FastAPI): screened by `src/spam.py`, stored via `src/db.py`, mailed via `src/mailer.py` with the templates in `src/mail_templates.py` |
 | `/reservations` (legacy) | 301 → `/bar` |
 | Other unmatched paths | FastAPI catch-all proxies to `ASSETS` (official pattern) |
 
@@ -64,6 +64,8 @@ For form tests, create `.dev.vars` (gitignored) in the project root:
 MAILAPI_URL=https://your-mailapi.vercel.app
 MAILAPI_KEY=your-mailapi-api-key
 EMAIL_TO=info@philexentertainment.com
+TURSO_DATABASE_URL=libsql://philex-doombuggy.aws-us-east-1.turso.io
+TURSO_AUTH_TOKEN=your-database-token        # turso db tokens create philex
 ```
 
 ## Deploy
@@ -74,19 +76,23 @@ uv run pywrangler deploy
 
 It prompts you to log in to Cloudflare via the browser on first use.
 
-Environment variables (secrets — set with `npx wrangler secret put <NAME>` or
-in the dashboard under **Settings → Variables and Secrets**):
+Environment variables. Non-secret values live in `wrangler.jsonc` under `vars`
+(visible and version-controlled); secrets are set with
+`npx wrangler secret put <NAME>` or in the dashboard under
+**Settings → Variables and Secrets** — never in `wrangler.jsonc`:
 
-| Variable | Required | Notes |
-| --- | --- | --- |
-| `MAILAPI_URL` | yes | base URL of your mailapi deployment, no trailing slash |
-| `MAILAPI_KEY` | yes | API key from mailapi's `API_KEYS`; Cloudflare owns it |
-| `EMAIL_TO` | yes | where contact/reservation mail is delivered |
-| `EMAIL_FROM_NAME` | no | display name on the From header; unset uses mailapi's account `fromName` |
-| `MAILAPI_ACCOUNT` | no | only needed if the key is scoped to more than one account |
+| Variable | Required | Where | Notes |
+| --- | --- | --- | --- |
+| `MAILAPI_URL` | yes | `vars` | base URL of your mailapi deployment, no trailing slash |
+| `MAILAPI_KEY` | yes | secret | API key from mailapi's `API_KEYS`; Cloudflare owns it |
+| `EMAIL_TO` | yes | `vars` | where the contact and reservation notifications are delivered |
+| `TURSO_DATABASE_URL` | yes | `vars` | `libsql://…` for the `philex` database; `https://` also works |
+| `TURSO_AUTH_TOKEN` | yes | secret | database token (`turso db tokens create philex`), **not** an API token |
+| `EMAIL_FROM_NAME` | no | either | display name on the From header; unset uses mailapi's account `fromName` |
+| `MAILAPI_ACCOUNT` | no | either | only needed if the key is scoped to more than one account |
 
-Local `.dev.vars` is used by `pywrangler dev` automatically; production uses
-the secrets above.
+Local `.dev.vars` is used by `pywrangler dev` automatically and holds all of
+the above, secrets included; production reads the split above.
 
 ## Forms and spam
 
@@ -97,17 +103,48 @@ through the same path in `src/worker.py`:
    field, and a minimum fill time (the page stamps an `elapsed` field via
    `base.html`). A caught submission gets the normal thank-you, so a bot
    learns nothing.
-2. **Mail** — `src/mailer.py` → mailapi → `EMAIL_TO`. The email is the record;
-   there is no database.
+2. **Store** — `src/db.py` inserts one row into `submissions` on Turso (the
+   `philex` database, `docs/schema.sql`). This is the record: name, email,
+   phone, message, booking details, plus the visitor's IP and user agent.
+3. **Mail** — `src/mailer.py` → mailapi, with the templates in
+   `src/mail_templates.py`:
+   - contact and reservation → `EMAIL_TO` (philex), with `Reply-To` set to the
+     visitor so hitting reply answers them;
+   - free-ticket claim → **the claimant**, carrying the ticket (see below).
+     philex gets no notification for these; the row in `submissions` is the
+     record.
 
-There is no storage step and no per-IP cap. Both were removed with the Turso
-database: counting submissions per address needs shared state the Worker does
-not have, and losing a real enquiry is worse than accepting one spam entry.
-Submissions live in the site inbox — search it by name, or by subject
-(`Contact Form: …`, `Table Reservation: …`, `Free Ticket Claim: …`).
+There is still no per-IP cap: counting submissions per address needs shared
+state the Worker does not have on the request path, and losing a real enquiry
+is worse than accepting one spam entry. Rows are easy to query when a claim
+needs checking:
 
-A mailapi failure is logged (`<kind>: send failed`) and never surfaces: the
-visitor still gets the same redirect either way.
+```bash
+turso db shell philex "select created_at, kind, name, email, phone from submissions order by id desc limit 20"
+```
+
+Both the store and the mail are best effort and never surface to the visitor:
+a failure is logged as `<kind>: store failed` / `<kind>: send failed` and the
+visitor still gets the same redirect. The two are independent — if the mail
+fails, philex still has the row, and if the row fails, philex still has the
+mail.
+
+### Free ticket claims
+
+The claim mail is the guest's ticket, so it is addressed to them, not to
+philex. It carries:
+
+- the ticket art as a PNG attachment (`static/images/blaq-xperience-ticket-email.png`,
+  a 1200px quantised copy of the 1400px original — the full-size one is 756 kB,
+  too heavy for mailapi's 1 MiB request cap);
+- a short message with the event details, built by `ticket_delivery()`.
+
+If the asset cannot be read, the mail still goes out with a link to the
+public ticket instead — a storage hiccup must not strand a guest at the door
+(`free-ticket: ticket attachment unavailable` in the log).
+
+Tickets are still issued by hand on Tix (Attendees → Guests → Guest List);
+this only delivers the art and records who asked.
 
 ### Git push auto-deploy (optional)
 
@@ -173,14 +210,25 @@ platform (free plan also gives DNS + CDN):
 ## Layout
 
 ```
-src/worker.py      FastAPI app + WorkerEntrypoint (ASGI)
-src/mailer.py      HTTP client for the mailapi service
-src/spam.py        honeypot / fill-time screen shared by every form
-scripts/test_forms.py   stdlib tests for the endpoints and the screen
-scripts/build.mjs  renders templates/ -> dist/ and copies static/
-templates/         Jinja2 templates (source of truth)
-static/            images, fonts, etc.
-wrangler.jsonc     Worker config (python_workers, ASSETS binding = ./dist)
+src/worker.py         FastAPI app + WorkerEntrypoint (ASGI)
+src/mail_templates.py branded HTML mail (notifications + guest ticket)
+src/mailer.py         HTTP client for the mailapi service
+src/db.py             HTTP client for Turso (form submissions)
+src/spam.py           honeypot / fill-time screen shared by every form
+docs/schema.sql       the submissions table, to recreate it on a fresh database
+scripts/test_forms.py stdlib tests for the endpoints, storage and templates
+scripts/test_mailer.py stdlib tests for the mailapi request this Worker builds
+scripts/test_db.py    stdlib tests for the Turso request this Worker builds
+scripts/build.mjs     renders templates/ -> dist/ and copies static/
+templates/            Jinja2 templates (source of truth)
+static/               images, fonts, etc.
+wrangler.jsonc        Worker config (python_workers, ASSETS binding = ./dist)
+```
+
+Run the tests (no pytest, no network, no Cloudflare runtime):
+
+```bash
+cd scripts && python3 test_forms.py && python3 test_mailer.py && python3 test_db.py
 ```
 
 The old FastAPI/Render files (`main.py`, `requirements.txt`, `render.yml`) and

@@ -2,9 +2,18 @@
 
 The pages are pre-rendered to ./dist by scripts/build.mjs and served from the
 ASSETS binding (see the "Serve a frontend" section of Cloudflare's FastAPI
-guide). This app handles the form POSTs — each one is screened for spam
-(src/spam.py) and emailed through the mailapi service (src/mailer.py) — and
-proxies everything else to the asset store.
+guide). This app handles the form POSTs. Every submission is:
+
+1. screened for spam (src/spam.py),
+2. written to the submissions table on Turso (src/db.py),
+3. mailed through the mailapi service (src/mailer.py), using the templates in
+   src/mail_templates.py.
+
+Contact and reservation submissions are mailed to EMAIL_TO (philex). A free
+ticket claim is mailed to the *claimant* instead, with the ticket attached -
+the organisers read that claim from the submissions table, not from an inbox.
+
+Everything else is proxied to the asset store.
 
 Run locally:   uv run pywrangler dev
 Deploy:        uv run pywrangler deploy
@@ -17,7 +26,9 @@ from fastapi.responses import RedirectResponse, Response
 from workers import WorkerEntrypoint
 
 import spam
-from mailer import send_email
+from db import save_submission
+from mail_templates import TICKET_FILENAME, TICKET_SUBJECT, notification, ticket_delivery
+from mailer import attachment, send_email
 
 app = FastAPI(docs_url=None, redoc_url=None)
 
@@ -26,16 +37,9 @@ MONTHS = [
     "July", "August", "September", "October", "November", "December",
 ]
 
-
-def escape_html(value: object) -> str:
-    return (
-        str(value)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&#39;")
-    )
+# Email-sized copy of the ticket art (the 1400px original is 756 kB, too heavy
+# for an attachment). Built from static/images/blaq-xperience-ticket-1400.png.
+TICKET_ASSET = "static/images/blaq-xperience-ticket-email.png"
 
 
 def format_date(raw: str) -> str:
@@ -57,16 +61,81 @@ def _env_value(env, name: str) -> str:
     return value if value is not None else ""
 
 
-async def _deliver(env, *, kind: str, subject: str, html: str) -> None:
+def _header(request: Request, name: str) -> str:
+    value = request.headers.get(name, "")
+    return (value or "").strip()
+
+
+def _client_info(request: Request) -> tuple[str, str]:
+    """The visitor's address and browser, for the stored row.
+
+    ``cf-connecting-ip`` is set by Cloudflare on every request; the forwarded
+    header is the fallback for local runs and tests.
+    """
+    ip = _header(request, "cf-connecting-ip")
+    if not ip:
+        ip = _header(request, "x-forwarded-for").split(",")[0].strip()
+    return ip, _header(request, "user-agent")
+
+
+async def _record(env, *, kind: str, request: Request, **fields) -> None:
+    """Store a submission.
+
+    Best effort, like the mail: losing a row is bad, but losing the visitor's
+    redirect is worse, so a failure is logged and swallowed.
+    """
+    ip, user_agent = _client_info(request)
+    try:
+        await save_submission(env, kind=kind, ip=ip, user_agent=user_agent, **fields)
+        print(f"{kind}: stored")
+    except Exception as exc:  # noqa: BLE001 - the visitor still gets their redirect
+        print(f"{kind}: store failed: {exc!r}")
+
+
+async def _deliver(
+    env,
+    *,
+    kind: str,
+    to: str,
+    subject: str,
+    html: str,
+    attachments: list[dict] | None = None,
+    reply_to: str | None = None,
+) -> None:
     """Mail a submission.
 
     A mailapi failure is logged, never surfaced: the visitor still gets the
-    same redirect, and nothing is lost that the Web UI did not already show.
+    same redirect, and the submission is in the submissions table either way.
     """
     try:
-        await send_email(env, to=_env_value(env, "EMAIL_TO"), subject=subject, html=html)
+        await send_email(
+            env,
+            to=to,
+            subject=subject,
+            html=html,
+            attachments=attachments,
+            reply_to=reply_to,
+        )
     except Exception as exc:  # noqa: BLE001 - the visitor still gets their redirect
         print(f"{kind}: send failed: {exc!r}")
+
+
+async def _asset_bytes(env, path: str) -> bytes:
+    """Read a file out of the ASSETS binding as bytes.
+
+    Same addressing the catch-all proxy uses. Used to attach the ticket, which
+    is served from the same static assets as the site itself.
+    """
+    resp = await env.ASSETS.fetch(f"https://assets.local/{path.lstrip('/')}")
+    status_code = getattr(resp, "status", 200)
+    if status_code != 200:
+        raise RuntimeError(f"asset {path} returned HTTP {status_code}")
+    raw = await resp.bytes()
+    # The runtime may hand back a JS typed array; unwrap it if so.
+    to_py = getattr(raw, "to_py", None)
+    if callable(to_py):
+        raw = to_py()
+    return bytes(raw)
 
 
 @app.post("/contact-us")
@@ -92,17 +161,23 @@ async def contact_us(
     elif not all(value.values()) or "@" not in value["email"]:
         print(f"contact-us: invalid submission (name/email/message required): {value!r}")
     else:
-        html = (
-            "<h2>Form Submission</h2>"
-            f"<p><b>Name:</b> {escape_html(value['name'])}</p>"
-            f"<p><b>Email:</b> {escape_html(value['email'])}</p>"
-            f"<p><b>Message:</b> {escape_html(value['message'])}</p>"
-        )
+        await _record(env, kind="contact", request=request, **value)
         await _deliver(
             env,
             kind="contact",
+            to=_env_value(env, "EMAIL_TO"),
             subject=f"Contact Form: {value['name']}",
-            html=html,
+            html=notification(
+                heading="New contact message",
+                preheader=f"{value['name']} · {value['email']}",
+                rows=[
+                    ("Name", value["name"]),
+                    ("Email", value["email"]),
+                    ("Message", value["message"]),
+                ],
+                note=f"Replying to this email answers {value['name']} directly.",
+            ),
+            reply_to=value["email"],
         )
     return RedirectResponse(url="/contact", status_code=status.HTTP_302_FOUND)
 
@@ -125,9 +200,9 @@ async def reserve_table(
         "name": name.strip(),
         "email": email.strip(),
         "phone": phone.strip(),
-        "Party Size": partysize.strip(),
-        "Date": format_date(date),
-        "Time": time.strip(),
+        "party_size": partysize.strip(),
+        "booking_date": format_date(date),
+        "booking_time": time.strip(),
     }
 
     reason = await spam.screen(website=website, elapsed=elapsed)
@@ -136,20 +211,29 @@ async def reserve_table(
     elif not all(value.values()) or "@" not in value["email"]:
         print(f"reserve-table: invalid submission (name/email/phone/partysize/date/time required): {value!r}")
     else:
-        html = (
-            "<h2>Table Reservation Request</h2>"
-            f"<p><b>Name:</b> {escape_html(value['name'])}</p>"
-            f"<p><b>Email:</b> {escape_html(value['email'])}</p>"
-            f"<p><b>Phone:</b> {escape_html(value['phone'])}</p>"
-            f"<p><b>Party Size:</b> {escape_html(value['Party Size'])}</p>"
-            f"<p><b>Date:</b> {escape_html(value['Date'])}</p>"
-            f"<p><b>Time:</b> {escape_html(value['Time'])}</p>"
-        )
+        await _record(env, kind="reservation", request=request, **value)
         await _deliver(
             env,
             kind="reservation",
+            to=_env_value(env, "EMAIL_TO"),
             subject=f"Table Reservation: {value['name']}",
-            html=html,
+            html=notification(
+                heading="New table reservation",
+                preheader=(
+                    f"{value['name']} · {value['booking_date']} at "
+                    f"{value['booking_time']} · party of {value['party_size']}"
+                ),
+                rows=[
+                    ("Name", value["name"]),
+                    ("Email", value["email"]),
+                    ("Phone", value["phone"]),
+                    ("Party Size", value["party_size"]),
+                    ("Date", value["booking_date"]),
+                    ("Time", value["booking_time"]),
+                ],
+                note=f"Confirm with the guest by replying to this email or calling {value['phone']}.",
+            ),
+            reply_to=value["email"],
         )
     return RedirectResponse(url="/bar", status_code=status.HTTP_302_FOUND)
 
@@ -165,8 +249,10 @@ async def free_ticket(
 ):
     """Handle free-ticket claims from the /bar giveaway popup.
 
-    Tickets themselves are issued by hand on Tix (Attendees -> Guests -> Guest
-    List); this mails the claim to the organisers so they can issue one.
+    The claimant gets the ticket, philex does not get a copy: the organisers
+    read the claim from the submissions table, and the guest is the one who
+    needs the mail. If the ticket art cannot be read, the claim is still mailed
+    with a link to it - a storage hiccup must not strand a guest at the door.
     """
     env = request.scope["env"]
     value = {
@@ -181,18 +267,24 @@ async def free_ticket(
     elif not all(value.values()) or "@" not in value["email"]:
         print(f"free-ticket: invalid submission (name/email/phone required): {value!r}")
     else:
-        html = (
-            "<h2>Free Ticket Claim (The BLAQ Xperience)</h2>"
-            f"<p><b>Name:</b> {escape_html(value['name'])}</p>"
-            f"<p><b>Email:</b> {escape_html(value['email'])}</p>"
-            f"<p><b>Phone:</b> {escape_html(value['phone'])}</p>"
-            "<p>Send this guest their ticket: Tix &rarr; Attendees &rarr; Guests &rarr; Guest List.</p>"
-        )
+        # Stored before it is mailed: with no notification going to philex, this
+        # row is what the organisers work from.
+        await _record(env, kind="free-ticket", request=request, **value)
+
+        attachments: list[dict] = []
+        try:
+            ticket = await _asset_bytes(env, TICKET_ASSET)
+            attachments.append(attachment(TICKET_FILENAME, ticket, "image/png"))
+        except Exception as exc:  # noqa: BLE001 - fall back to linking the ticket
+            print(f"free-ticket: ticket attachment unavailable: {exc!r}")
+
         await _deliver(
             env,
             kind="free-ticket",
-            subject=f"Free Ticket Claim: {value['name']}",
-            html=html,
+            to=value["email"],
+            subject=TICKET_SUBJECT,
+            html=ticket_delivery(name=value["name"], attached=bool(attachments)),
+            attachments=attachments,
         )
     return RedirectResponse(url="/bar?claimed=1", status_code=status.HTTP_302_FOUND)
 

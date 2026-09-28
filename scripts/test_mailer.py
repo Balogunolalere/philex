@@ -10,13 +10,14 @@ Run: python3 test_mailer.py
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from mailer import send_email  # noqa: E402
+from mailer import attachment, send_email  # noqa: E402
 
 
 class Env:
@@ -236,6 +237,56 @@ def test_non_json_error_response_still_reports_status():
     else:
         raise AssertionError("a 5xx from mailapi must raise")
     print("PASS non_json_error_response_still_reports_status")
+
+
+def test_attachment_encodes_the_body_as_base64():
+    """mailapi takes attachment bodies as base64 strings, not raw bytes."""
+    built = attachment("The-BLAQ-Xperience-Ticket.png", b"\x89PNG\r\n\x1a\n", "image/png")
+
+    assert built == {
+        "filename": "The-BLAQ-Xperience-Ticket.png",
+        "content": base64.b64encode(b"\x89PNG\r\n\x1a\n").decode("ascii"),
+        "contentType": "image/png",
+    }
+    assert base64.b64decode(built["content"]) == b"\x89PNG\r\n\x1a\n", "the body must round-trip"
+    print("PASS attachment_encodes_the_body_as_base64")
+
+
+def test_attachments_and_reply_to_are_forwarded():
+    post = recorder()
+    env = Env(MAILAPI_URL="https://m.example.app", MAILAPI_KEY="k")
+    files = [attachment("ticket.png", b"png-bytes", "image/png")]
+
+    asyncio.run(
+        send_email(
+            env,
+            to="ada@example.com",
+            subject="s",
+            html="<p>x</p>",
+            attachments=files,
+            reply_to="ada@example.com",
+            post=post,
+        )
+    )
+
+    payload = post.calls[0]["payload"]
+    assert payload["attachments"] == files
+    assert payload["replyTo"] == "ada@example.com"
+    print("PASS attachments_and_reply_to_are_forwarded")
+
+
+def test_attachments_and_reply_to_are_omitted_when_unset():
+    """An empty list must not become an empty MIME part, and no replyTo means
+    replies go back to the mailbox that sent the notification."""
+    post = recorder()
+    env = Env(MAILAPI_URL="https://m.example.app", MAILAPI_KEY="k")
+
+    asyncio.run(send_email(env, to="a@b.com", subject="s", html="<p>x</p>", attachments=[], post=post))
+
+    payload = post.calls[0]["payload"]
+    assert "attachments" not in payload
+    assert "replyTo" not in payload
+    print("PASS attachments_and_reply_to_are_omitted_when_unset")
 
 
 def main():
