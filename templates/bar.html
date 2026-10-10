@@ -3539,8 +3539,11 @@
 									.barx-free__note { margin: 22px 0 0; color: rgba(206, 216, 216, .72); font-size: 15px; }
 									.barx-free__note a { color: #C49871; text-decoration: underline; }
 									.barx-free__note a:hover { color: #E3C298; }
-									.barx-free__art { max-width: 660px; margin: 34px auto 0; }
-									.barx-free__art img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid rgba(196, 152, 113, .45); }
+									.barx-free__art { display: block; width: 100%; max-width: 660px; margin: 34px auto 0; padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
+									.barx-free__art img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid rgba(196, 152, 113, .45); transition: transform .25s ease, border-color .25s ease; }
+									.barx-free__art:hover img, .barx-free__art:focus-visible img { transform: translateY(-2px); border-color: #C49871; }
+									.barx-free__art:focus-visible { outline: 2px solid #C49871; outline-offset: 4px; border-radius: 14px; }
+									.barx-free__art-hint { display: block; margin: 12px 0 0; color: #C49871; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; }
 									.barx-btn { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; padding: 17px 46px; border: 0; border-radius: 60px; background: linear-gradient(135deg, #E3C298 0%, #C49871 48%, #AE8460 100%); color: #102B2A; font-family: inherit; font-size: 21px; font-weight: 600; letter-spacing: .1em; line-height: 1.2; text-transform: uppercase; text-decoration: none; cursor: pointer; box-shadow: 0 14px 34px rgba(196, 152, 113, .3); transition: transform .25s ease, box-shadow .25s ease; }
 									.barx-btn:hover, .barx-btn:focus { transform: translateY(-2px); box-shadow: 0 18px 44px rgba(196, 152, 113, .5); color: #102B2A; }
 									.barx-btn__sub { font-size: 12px; font-weight: 400; letter-spacing: .18em; opacity: .78; }
@@ -3557,6 +3560,13 @@
 									.barx-modal.is-open .barx-modal__panel { transform: none; }
 									.barx-modal__close { position: absolute; top: 14px; right: 14px; z-index: 3; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0; border: 1px solid rgba(196, 152, 113, .55); border-radius: 50%; background: rgba(6, 16, 16, .74); color: #fff; font-size: 24px; line-height: 1; cursor: pointer; transition: background .2s ease, color .2s ease; }
 									.barx-modal__close:hover, .barx-modal__close:focus { background: #C49871; color: #102B2A; }
+									/* the ticket popup: same panel, one tap away from the claim form */
+									.barx-promo__art { display: block; width: 100%; padding: 0; border: 0; background: none; font: inherit; cursor: pointer; }
+									.barx-promo__art img { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid rgba(196, 152, 113, .38); transition: transform .25s ease, border-color .25s ease; }
+									.barx-promo__art:hover img, .barx-promo__art:focus-visible img { transform: translateY(-2px); border-color: #C49871; }
+									.barx-promo__art:focus-visible { outline: 2px solid #C49871; outline-offset: 4px; border-radius: 12px; }
+									.barx-promo__cta { margin: 18px 0 0; }
+									.barx-promo__hint { margin: 10px 0 0; color: #C49871; font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; text-align: center; }
 									.barx-claim__heading { margin: 0 0 8px; padding-right: 34px; color: #fff; font-family: "Cinzel", "Cormorant", "Jost", serif; font-size: 25px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 									.barx-claim__intro { margin: 0 0 22px; color: #C49871; font-size: 14px; letter-spacing: .04em; }
 									.barx-field { display: block; margin: 0 0 16px; text-align: left; }
@@ -3587,18 +3597,20 @@
 											out free. If you would love to be there, fill the short form and we&rsquo;ll send
 											your ticket to your email. One ticket per person, while they last.
 										</p>
-										<button type="button" class="barx-btn" id="barx-open">
+										<button type="button" class="barx-btn" id="barx-open" data-barx-open>
 											Claim a free ticket
 											<span class="barx-btn__sub">one per person</span>
 										</button>
 										<p class="barx-free__note">Already coming? <a href="#reserve">Book a table at the lounge</a> while you&rsquo;re here.</p>
-																				<div class="barx-free__art">
+										<button type="button" class="barx-free__art" data-barx-open
+											aria-label="Claim your free ticket — open the form">
 											<img src="static/images/blaq-xperience-ticket-1400.png"
 												srcset="static/images/blaq-xperience-ticket-900.png 900w, static/images/blaq-xperience-ticket-1400.png 1400w"
 												sizes="(max-width: 680px) 92vw, 660px"
 												width="1400" height="396" loading="lazy" decoding="async"
 											alt="The BLAQ Xperience ticket — Jogor Centre, Ibadan, Sunday 11th October, 2PM" />
-										</div>
+											<span class="barx-free__art-hint">Tap the ticket to claim yours</span>
+										</button>
 									</div>
 								</section>
 
@@ -3637,67 +3649,130 @@
 										</form>
 									</div>
 								</div>
+
+								<!-- The BLAQ Xperience — free-ticket popup (shown once per visit, like the home page's) -->
+								<div class="barx-modal" id="barx-promo" role="dialog" aria-modal="true" aria-label="The BLAQ Xperience — claim your free ticket" hidden>
+									<div class="barx-modal__backdrop" data-barx-close></div>
+									<div class="barx-modal__panel">
+										<button type="button" class="barx-modal__close" data-barx-close aria-label="Close">&times;</button>
+										<button type="button" class="barx-promo__art" data-barx-open
+											aria-label="Claim your free ticket — open the form">
+											<img src="static/images/blaq-xperience-ticket-900.png"
+												srcset="static/images/blaq-xperience-ticket-900.png 900w, static/images/blaq-xperience-ticket-1400.png 1400w"
+												sizes="(max-width: 480px) 88vw, 404px"
+												width="1400" height="396" decoding="async"
+												alt="The BLAQ Xperience ticket — Jogor Centre, Ibadan, Sunday 11th October, 2PM" />
+										</button>
+										<button type="button" class="barx-btn barx-btn--block barx-promo__cta" data-barx-open data-barx-focus>
+											Claim a free ticket
+											<span class="barx-btn__sub">one per person</span>
+										</button>
+										<p class="barx-promo__hint">Sunday 11th October &middot; Jogor Centre, Ibadan</p>
+									</div>
+								</div>
 								<script>
 									(function () {
-										var modal = document.getElementById("barx-claim");
-										var openBtn = document.getElementById("barx-open");
-										if (!modal || !openBtn) { return; }
+										/* One panel helper behind both the claim form and the ticket popup:
+										   open/close, Escape, a focus trap, and a restore-focus fallback. */
+										function setupModal(modal) {
+											if (!modal) { return null; }
+											var lastFocused = null;
+											var closeTimer = null;
+
+											function open() {
+												lastFocused = document.activeElement;
+												modal.hidden = false;
+												window.requestAnimationFrame(function () { modal.classList.add("is-open"); });
+												document.body.classList.add("barx-modal-open");
+												document.addEventListener("keydown", onKeydown);
+												var target = modal.querySelector("[data-barx-focus]") ||
+													modal.querySelector("button:not([disabled]), a[href], input:not([type=hidden])");
+												if (target) { target.focus({ preventScroll: true }); }
+											}
+
+											function close() {
+												modal.classList.remove("is-open");
+												if (!document.querySelector(".barx-modal.is-open")) {
+													document.body.classList.remove("barx-modal-open");
+												}
+												document.removeEventListener("keydown", onKeydown);
+												window.clearTimeout(closeTimer);
+												closeTimer = window.setTimeout(function () { modal.hidden = true; }, 260);
+												/* the element that opened this panel may be inside the other
+												   panel (the popup hands over to the form) - fall back to the
+												   section button rather than focusing something hidden */
+												var back = lastFocused && lastFocused.offsetParent !== null ? lastFocused : document.getElementById("barx-open");
+												if (back && back.focus) { back.focus({ preventScroll: true }); }
+											}
+
+											function onKeydown(event) {
+												if (event.key === "Escape") { close(); return; }
+												if (event.key !== "Tab") { return; }
+												var focusables = modal.querySelectorAll("a[href], button:not([disabled]), input:not([type=hidden])");
+												if (!focusables.length) { return; }
+												var first = focusables[0];
+												var last = focusables[focusables.length - 1];
+												if (event.shiftKey && document.activeElement === first) {
+													event.preventDefault();
+													last.focus();
+												} else if (!event.shiftKey && document.activeElement === last) {
+													event.preventDefault();
+													first.focus();
+												}
+											}
+
+											modal.addEventListener("click", function (event) {
+												if (event.target.closest("[data-barx-close]")) { close(); }
+											});
+
+											return { open: open, close: close };
+										}
+
+										var claim = setupModal(document.getElementById("barx-claim"));
+										var promo = setupModal(document.getElementById("barx-promo"));
 										var form = document.getElementById("barx-form");
 										var thanks = document.getElementById("barx-thanks");
-										var lastFocused = null;
-										var closeTimer = null;
-
-										function open() {
-											lastFocused = document.activeElement;
-											modal.hidden = false;
-											window.requestAnimationFrame(function () { modal.classList.add("is-open"); });
-											document.body.classList.add("barx-modal-open");
-											document.addEventListener("keydown", onKeydown);
-											var target = thanks && !thanks.hidden ? thanks.querySelector("button") : form.querySelector("input");
-											if (target) { target.focus({ preventScroll: true }); }
-										}
-
-										function close() {
-											modal.classList.remove("is-open");
-											document.body.classList.remove("barx-modal-open");
-											document.removeEventListener("keydown", onKeydown);
-											window.clearTimeout(closeTimer);
-											closeTimer = window.setTimeout(function () { modal.hidden = true; }, 260);
-											if (lastFocused && lastFocused.focus) { lastFocused.focus({ preventScroll: true }); }
-										}
-
-										function onKeydown(event) {
-											if (event.key === "Escape") { close(); return; }
-											if (event.key !== "Tab") { return; }
-											var focusables = modal.querySelectorAll("a[href], button:not([disabled]), input:not([type=hidden])");
-											if (!focusables.length) { return; }
-											var first = focusables[0];
-											var last = focusables[focusables.length - 1];
-											if (event.shiftKey && document.activeElement === first) {
-												event.preventDefault();
-												last.focus();
-											} else if (!event.shiftKey && document.activeElement === last) {
-												event.preventDefault();
-												first.focus();
-											}
-										}
 
 										function showThanks() {
 											if (thanks) { thanks.hidden = false; }
 											if (form) { form.hidden = true; }
 										}
 
-										openBtn.addEventListener("click", open);
-										modal.addEventListener("click", function (event) {
-											if (event.target.closest("[data-barx-close]")) { close(); }
+										/* the claim panel opens on whatever the visitor should act on:
+										   the thanks button after a claim, otherwise the name field */
+										function markClaimFocus() {
+											var target = thanks && !thanks.hidden ? thanks.querySelector("button") : form && form.querySelector("input");
+											if (target) { target.setAttribute("data-barx-focus", ""); }
+										}
+
+										function openClaim() {
+											if (promo) { promo.close(); }
+											markClaimFocus();
+											if (claim) { claim.open(); }
+										}
+
+										/* both the popup and the section's ticket art lead to the form */
+										Array.prototype.forEach.call(document.querySelectorAll("[data-barx-open]"), function (el) {
+											el.addEventListener("click", openClaim);
 										});
 
 										/* back from a successful POST: /bar?claimed=1 */
 										if (/(?:^|[?&])claimed=1(?:&|$)/.test(window.location.search)) {
 											showThanks();
-											window.setTimeout(open, 300);
+											window.setTimeout(function () { markClaimFocus(); if (claim) { claim.open(); } }, 300);
 											if (window.history.replaceState) {
 												window.history.replaceState(null, "", window.location.pathname);
+											}
+										} else if (promo) {
+											/* the ticket popup, once per visit - the same behaviour as the home page */
+											var STORAGE_KEY = "barxTicketClaimPopupSeen";
+											var seen = false;
+											try { seen = window.sessionStorage.getItem(STORAGE_KEY) === "1"; } catch (e) { seen = false; }
+											if (!seen) {
+												window.setTimeout(function () {
+													promo.open();
+													try { window.sessionStorage.setItem(STORAGE_KEY, "1"); } catch (e) { /* private mode */ }
+												}, 700);
 											}
 										}
 									})();
